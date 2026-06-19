@@ -80,7 +80,8 @@ describe('server boot (bundled artifact, no node_modules)', () => {
     });
 
     expect(tools).toContain('workday_healthcheck');
+    expect(tools).toContain('workday_get_apps');
     expect(tools).toContain('workday_get_task');
-    expect(tools.length).toBeGreaterThanOrEqual(2);
+    expect(tools.length).toBeGreaterThanOrEqual(3);
   });
 });

@@ -54,6 +54,14 @@ export interface WorkdayTask {
   export?: { excel?: string; pdf?: string };
 }
 
+/** A launchable Workday app from the user's app menu. */
+export interface WorkdayApp {
+  label: string;
+  /** Workday task instance id (e.g. `2998$43525`), resolvable via
+   *  `workday_get_task`. May be a shared launcher id for some apps. */
+  taskId?: string;
+}
+
 type Obj = Record<string, unknown>;
 
 function isObj(v: unknown): v is Obj {
@@ -118,6 +126,13 @@ function collectReferences(node: unknown, out: Acc, listLabel?: string, uriTempl
   if (!isObj(node)) return;
   const widget = str(node.widget);
   if (widget === 'text') return; // a column value, not a reference
+  if (widget === 'link') {
+    const uri = str(node.uri);
+    if (uri) {
+      out.references.push({ label: str(node.label) ?? str(node.text) ?? '', uri });
+    }
+    return;
+  }
   if (widget === 'moniker') {
     const instanceId = str(node.instanceId);
     const value = str(node.text);
@@ -161,7 +176,7 @@ function collectFlat(node: unknown, out: Acc, listLabel?: string, uriTemplate?: 
     if (label || value) out.fields.push({ label, value });
     return;
   }
-  if (widget === 'moniker' || widget === 'monikerList') {
+  if (widget === 'moniker' || widget === 'monikerList' || widget === 'link') {
     collectReferences(node, out, listLabel, uriTemplate);
     return;
   }
@@ -257,6 +272,38 @@ function parseSections(root: Obj): WorkdaySection[] {
 }
 
 /**
+ * Parse the user's app menu (`quickaccess/fetch.htmld`) into a flat list of
+ * launchable apps. The tree is a `widget/children` structure whose leaf
+ * `configuredAppsItem` nodes carry `label` + `taskIid`; we walk it and dedupe
+ * by label (Workday repeats some entries). Defensive against malformed input.
+ */
+export function parseApps(root: unknown): WorkdayApp[] {
+  const apps: WorkdayApp[] = [];
+  const seen = new Set<string>();
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const n of node) walk(n);
+      return;
+    }
+    if (!isObj(node)) return;
+    if (str(node.widget) === 'configuredAppsItem') {
+      const label = str(node.label);
+      if (label && !seen.has(label)) {
+        seen.add(label);
+        const taskId = str(node.taskIid);
+        apps.push({ label, ...(taskId !== undefined ? { taskId } : {}) });
+      }
+    }
+    for (const [k, v] of Object.entries(node)) {
+      if (k === 'widget') continue;
+      walk(v);
+    }
+  };
+  walk(root);
+  return apps;
+}
+
+/**
  * Parse a Workday `*.htmld` widget-tree response into a flat, secret-free
  * task view. Defensive against malformed input — returns empty sections
  * rather than throwing.
@@ -269,7 +316,10 @@ export function parseTask(root: unknown): WorkdayTask {
     sections: parseSections(root),
     relatedTasks: parseRelatedTasks(root),
   };
-  if (str(root.title)) task.title = str(root.title);
+  // `title` is a string on data cards but a `{ text, widget }` widget on task
+  // pages — accept both.
+  const title = str(root.title) ?? (isObj(root.title) ? str(root.title.text) : undefined);
+  if (title) task.title = title;
   if (str(root.taskId)) task.taskId = str(root.taskId);
   if (str(root.tenant)) task.tenant = str(root.tenant);
   const user = parseUser(root);

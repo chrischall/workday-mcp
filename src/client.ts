@@ -16,7 +16,7 @@ import type {
   FetchResult,
   WorkdayTransport,
 } from './transport.js';
-import { parseTask, type WorkdayTask } from './parse.js';
+import { parseTask, parseApps, type WorkdayTask, type WorkdayApp } from './parse.js';
 
 const DEFAULT_HOST = 'wd5.myworkday.com';
 
@@ -115,6 +115,10 @@ export class WorkdayClient {
     let p = path.trim();
     const hash = p.indexOf('#');
     if (hash >= 0) p = p.slice(0, hash);
+    // A bare Workday task id (e.g. `2998$43525`) resolves to the constructable
+    // task data endpoint — lets callers pass an id from workday_get_apps or a
+    // prior result's references without knowing the URL shape.
+    if (/^\d+\$[A-Za-z0-9_-]+$/.test(p)) return `/${this.tenant}/task/${p}.htmld`;
     if (!p.startsWith('/')) p = `/${this.tenant}/${p}`;
     p = p.replace(`/${this.tenant}/d/`, `/${this.tenant}/`);
     return p;
@@ -157,6 +161,14 @@ export class WorkdayClient {
     const resolved = this.resolvePath(path);
     const json = await this.fetchJson(resolved);
     return parseTask(json);
+  }
+
+  /** List the user's Workday apps (label + launchable task id). */
+  async getApps(): Promise<WorkdayApp[]> {
+    const json = await this.fetchJson(
+      `/${this.tenant}/quickaccess/fetch.htmld?shouldFetchUpcApps=true`
+    );
+    return parseApps(json);
   }
 
   private throwIfNotOk(result: FetchResult, method: string, path: string): void {

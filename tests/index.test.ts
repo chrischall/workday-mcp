@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerHealthcheckTools } from '../src/tools/healthcheck.js';
 import { registerTaskTools } from '../src/tools/task.js';
+import { registerAppsTools } from '../src/tools/apps.js';
 import { WorkdayClient } from '../src/client.js';
 import type { WorkdayTransport, BridgeStatus, BridgeProbeResult } from '../src/transport.js';
 
@@ -36,7 +37,8 @@ describe('tool registration', () => {
   it('registers the expected read-only tool roster', () => {
     const { server, names } = fakeServer();
     registerHealthcheckTools(server, client);
+    registerAppsTools(server, client);
     registerTaskTools(server, client);
-    expect(names).toEqual(['workday_healthcheck', 'workday_get_task']);
+    expect(names).toEqual(['workday_healthcheck', 'workday_get_apps', 'workday_get_task']);
   });
 });

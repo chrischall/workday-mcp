@@ -65,24 +65,30 @@ reuses that live session — there is no separate login.
 
 ## Tools
 
-- **`workday_get_task`** — read a Workday task or data card by path. Returns
-  title, current user, each section's `label`/`value` fields, navigable
-  `references` (with instance ids + drill-in uris), related tasks, and export
-  links. The path comes from a prior result's `references[].uri` /
-  `relatedTasks[].uri`, or from pasting the URL of a Workday page you have open
-  (a `/{tenant}/d/...` SPA URL is normalized to its data endpoint automatically).
+- **`workday_get_apps`** — list your Workday apps (Personal Information, Benefits
+  and Pay, Directory, Total Rewards, …), each with a launchable task id. The
+  discovery entry point.
+- **`workday_get_task`** — read a Workday task or data card. Returns title,
+  current user, each section's `label`/`value` fields, navigable `references`
+  (instance ids + drill-in uris), related tasks, and export links. Accepts a
+  **bare task id** (e.g. `2998$43525`, from `workday_get_apps`), a prior result's
+  `references[].uri`, or the pasted URL of a Workday page you have open (a
+  `/{tenant}/d/...` SPA URL is normalized to its data endpoint automatically).
 - **`workday_healthcheck`** — verify the bridge + session end-to-end and get a
   plain-English hint distinguishing "bridge down" from "extension not connected"
   from "Workday session expired (re-sign-in)".
 
 ## How navigation works
 
-Workday data-card paths carry opaque, page-context-bound tokens, so you don't
-construct them — you **crawl**: open a Workday page you care about, paste its URL
-into `workday_get_task`, then follow the `references[].uri` / `relatedTasks[].uri`
-it returns into deeper tasks.
+Start with `workday_get_apps`, pass an app's `taskId` to `workday_get_task`, then
+follow the `references[].uri` it returns into deeper data. Some apps share a
+generic launcher id and open to a near-empty page — for those (and for any rich
+data card), open the page in your browser and paste its URL into
+`workday_get_task`, since Workday data-card paths carry opaque, page-context-bound
+tokens that can't be constructed.
 
 ## Status
 
-v1 is **read-only**. Apps/worklet discovery, typed pay/benefits/compensation
-tools, and (later) `confirm`-gated writes are planned — see `docs/WORKDAY-API.md`.
+v1 is **read-only**. Typed pay/benefits/compensation tools, inbox/search (Workday
+serves these via GraphQL), and (later) `confirm`-gated writes are planned — see
+`docs/WORKDAY-API.md`.
