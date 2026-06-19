@@ -290,8 +290,10 @@ export function parseApps(root: unknown): WorkdayApp[] {
       const label = str(node.label);
       if (label && !seen.has(label)) {
         seen.add(label);
+        // Truthy guard (matches parseTask's field guards) so an empty-string
+        // taskIid is omitted rather than emitted as `taskId: ""`.
         const taskId = str(node.taskIid);
-        apps.push({ label, ...(taskId !== undefined ? { taskId } : {}) });
+        apps.push({ label, ...(taskId ? { taskId } : {}) });
       }
     }
     for (const [k, v] of Object.entries(node)) {
