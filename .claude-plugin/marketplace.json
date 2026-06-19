@@ -1,0 +1,29 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "workday-mcp",
+  "owner": {
+    "name": "Chris Hall",
+    "email": "chris.c.hall@gmail.com"
+  },
+  "metadata": {
+    "description": "Read-only MCP server for Workday — fetch your tasks, pay, benefits and compensation data. Routes through the user's signed-in Workday tab via the fetchproxy browser extension, reusing their existing SSO-authenticated session.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "workday-mcp",
+      "displayName": "Workday",
+      "source": "./",
+      "description": "Read-only MCP server for Workday — fetch tasks, pay, benefits and compensation through your signed-in session",
+      "version": "0.1.0",
+      "author": {
+        "name": "Chris Hall"
+      },
+      "homepage": "https://github.com/chrischall/workday-mcp",
+      "repository": "https://github.com/chrischall/workday-mcp",
+      "license": "MIT",
+      "keywords": ["workday", "hr", "payroll", "benefits", "mcp"],
+      "category": "productivity"
+    }
+  ]
+}

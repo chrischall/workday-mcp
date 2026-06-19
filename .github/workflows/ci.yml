@@ -1,0 +1,17 @@
+name: CI
+
+# Thin stub — the gate and steps live in chrischall/workflows.
+# NOTE: converting to a reusable workflow renames the required check from
+# `ci` to `ci / ci`; scripts/update-ruleset.sh flips the ruleset.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+jobs:
+  ci:
+    uses: chrischall/workflows/.github/workflows/reusable-mcp-ci.yml@main
+    with:
+      node-version: "26"
+      build-command: npm run build
+      test-command: npm test

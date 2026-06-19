@@ -1,0 +1,16 @@
+{
+  "name": "workday-mcp",
+  "displayName": "Workday",
+  "version": "0.1.0",
+  "description": "Read-only Workday access for Claude — fetch your tasks, pay, benefits and compensation through your signed-in session",
+  "author": {
+    "name": "Chris Hall",
+    "email": "chris.c.hall@gmail.com"
+  },
+  "homepage": "https://github.com/chrischall/workday-mcp",
+  "repository": "https://github.com/chrischall/workday-mcp",
+  "license": "MIT",
+  "keywords": ["workday", "hr", "payroll", "benefits", "mcp"],
+  "skills": "./SKILL.md",
+  "mcp": "./.mcp.json"
+}

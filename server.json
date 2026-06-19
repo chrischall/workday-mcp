@@ -1,0 +1,40 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.chrischall/workday-mcp",
+  "description": "Read-only Workday for Claude — fetch tasks, pay, benefits via your signed-in session",
+  "repository": {
+    "url": "https://github.com/chrischall/workday-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "workday-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "WORKDAY_TENANT",
+          "description": "Workday tenant slug, e.g. `acme` for https://wd5.myworkday.com/acme.",
+          "isRequired": true,
+          "format": "string"
+        },
+        {
+          "name": "WORKDAY_HOST",
+          "description": "Workday data-center host (default wd5.myworkday.com).",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "WORKDAY_WS_PORT",
+          "description": "Override the fetchproxy WebSocket port (default 37149).",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

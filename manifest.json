@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/dxt/main/dist/mcpb-manifest.schema.json",
+  "manifest_version": "0.3",
+  "name": "workday-mcp",
+  "display_name": "Workday",
+  "version": "0.1.0",
+  "description": "Read-only Workday access for Claude — fetch your tasks, pay, benefits and compensation data through your signed-in session",
+  "author": {
+    "name": "Chris Chall",
+    "email": "chris.c.hall@gmail.com",
+    "url": "https://github.com/chrischall"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chrischall/workday-mcp"
+  },
+  "homepage": "https://github.com/chrischall/workday-mcp",
+  "support": "https://github.com/chrischall/workday-mcp/issues",
+  "license": "MIT",
+  "keywords": ["workday", "hr", "payroll", "benefits"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/bundle.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/bundle.js"],
+      "env": {
+        "WORKDAY_TENANT": "${user_config.tenant}",
+        "WORKDAY_HOST": "${user_config.host}"
+      }
+    }
+  },
+  "user_config": {
+    "tenant": {
+      "type": "string",
+      "title": "Workday tenant",
+      "description": "Your Workday tenant slug — the path segment after the host, e.g. for https://wd5.myworkday.com/acme it is `acme`.",
+      "required": true
+    },
+    "host": {
+      "type": "string",
+      "title": "Workday host",
+      "description": "Your Workday data-center host. Defaults to wd5.myworkday.com.",
+      "required": false,
+      "default": "wd5.myworkday.com"
+    }
+  },
+  "tools": [
+    {
+      "name": "workday_get_task",
+      "description": "Read a Workday task or data card by path — title, fields, references, related tasks"
+    },
+    {
+      "name": "workday_healthcheck",
+      "description": "Verify the fetchproxy bridge + Workday session end-to-end"
+    }
+  ]
+}
