@@ -71,6 +71,33 @@ describe('WorkdayClient.resolvePath', () => {
       '/acme/inst/13102!ABC/cacheable-task/2998$1.htmld'
     );
   });
+  it('resolves a bare task id to the constructable task endpoint', () => {
+    expect(client.resolvePath('2998$43525')).toBe('/acme/task/2998$43525.htmld');
+    expect(client.resolvePath(' 14860$79 ')).toBe('/acme/task/14860$79.htmld');
+  });
+});
+
+describe('WorkdayClient.getApps', () => {
+  it('fetches the app menu and parses it into a flat list', async () => {
+    const { client, transport } = makeClient();
+    transport.next = {
+      status: 200,
+      url: 'https://wd5.myworkday.com/acme/quickaccess/fetch.htmld',
+      body: JSON.stringify({
+        widget: 'configuredApps',
+        children: [
+          { widget: 'configuredAppsItem', label: 'Benefits and Pay', taskIid: '2998$43525' },
+          { widget: 'configuredAppsItem', label: 'Directory', taskIid: '2997$2151' },
+        ],
+      }),
+    };
+    const apps = await client.getApps();
+    expect(transport.lastInit?.path).toBe('/acme/quickaccess/fetch.htmld?shouldFetchUpcApps=true');
+    expect(apps).toEqual([
+      { label: 'Benefits and Pay', taskId: '2998$43525' },
+      { label: 'Directory', taskId: '2997$2151' },
+    ]);
+  });
 });
 
 describe('WorkdayClient.fetchJson', () => {

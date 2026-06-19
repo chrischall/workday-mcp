@@ -43,7 +43,8 @@ Then install the fetchproxy extension and sign into Workday in your browser.
 
 | Tool | What it does |
 | --- | --- |
-| `workday_get_task` | Read a Workday task/data card by path → title, fields, references, related tasks, export links |
+| `workday_get_apps` | List your Workday apps with launchable task ids — the discovery entry point |
+| `workday_get_task` | Read a Workday task/data card by task id or path → title, fields, references, related tasks, export links |
 | `workday_healthcheck` | Verify the bridge + session end-to-end with an actionable hint |
 
 ## Development

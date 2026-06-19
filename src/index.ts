@@ -19,6 +19,7 @@ import { WorkdayClient } from './client.js';
 import { FetchproxyTransport } from './transport-fetchproxy.js';
 import { registerHealthcheckTools } from './tools/healthcheck.js';
 import { registerTaskTools } from './tools/task.js';
+import { registerAppsTools } from './tools/apps.js';
 import { VERSION } from './version.js';
 
 const DEFAULT_HOST = 'wd5.myworkday.com';
@@ -40,6 +41,7 @@ await runMcp({
   deps: client,
   tools: [
     (server) => registerHealthcheckTools(server, client),
+    (server) => registerAppsTools(server, client),
     (server) => registerTaskTools(server, client),
   ],
   banner:

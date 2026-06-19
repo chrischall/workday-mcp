@@ -34,8 +34,16 @@ only request shapes and the widget-tree schema.**
     `39330!CKKz…~*…~`) — NOT constructable; it comes from loading the parent
     task. (The `cacheable-task` token is comparatively stable; the `card/all`
     child token rotates.)
+  - `/{tenant}/task/<taskId>.htmld` — **constructable** task data endpoint
+    (no page-context token needed). Returns clean JSON for any `<taskId>` like
+    `2998$43525`. NOTE: for container/launcher tasks it returns a near-empty
+    shell (no `cardContentSections`); rich data still needs the `cacheable-task`
+    + `card/all` crawl above. The `/d/task/<id>.htmld` form is the HTML SPA.
   - `/{tenant}/quickaccess/fetch.htmld?shouldFetchUpcApps=true` — the user's
-    pinned apps (a different `widget/children` tree — see Follow-ons).
+    apps. A `widget/children` tree whose `configuredAppsItem` leaves carry
+    `label` + `taskIid` (resolvable via `/task/<taskIid>.htmld`). Parsed by
+    `parseApps` → `workday_get_apps`. Some apps share a generic launcher
+    `taskIid` (e.g. `2997$2151`).
   - `/{tenant}/get-global-prefs.htmld?feature=<f>` — tiny authenticated JSON;
     used as the healthcheck probe.
 - A modern **GraphQL** surface also exists at
@@ -100,16 +108,17 @@ the final URL host ≠ the tenant host (cross-origin SSO redirect) or the body i
 an HTML login/SAML page (`SAMLRequest` / `pingfederate` markers) rather than the
 JSON widget tree, and on 401/403.
 
-## Follow-ons (not in v1)
+## Follow-ons (not yet)
 
-- **Apps/worklet discovery**: parse `quickaccess/fetch.htmld`'s `widget/children`
-  tree (`upcApp` / `configuredAppsItem` / `category` leaves — distinct vocabulary,
-  not yet captured) to list launchable apps + their task URIs.
-- **GraphQL home** (`/wday/pex/graphql/...`): awaiting actions, inbox count,
-  announcements.
+- **Inbox / "My Tasks" + global search**: served via the **GraphQL** surface
+  (`/wday/pex/graphql/...`, POST) or stomp, NOT a GET-able `.htmld` — every
+  guessed `inbox`/`unifiedinbox`/`search` `.htmld` path 404s (only the SPA shell
+  and the `actioncount` endpoint are GET-able). Needs the GraphQL operation +
+  persisted-query handling captured before building.
 - **Typed convenience tools**: `workday_get_payslips`, `workday_get_compensation`,
-  `workday_get_benefits` — thin wrappers over `getTask` once each task's launch
-  template is captured.
+  `workday_get_benefits` — thin wrappers over `getTask`. Each needs the page-
+  context crawl (load the hub via `cacheable-task`, follow `card/all` children),
+  since the constructable `/task/<id>` path returns shells for these containers.
 - **Writes** (planned): Workday writes are multi-step business processes, not
   single POSTs — each needs its own capture + a `confirm`-gated `preview()` +
   re-read verification.

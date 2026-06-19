@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTask } from '../src/parse.js';
+import { parseTask, parseApps } from '../src/parse.js';
 
 // Synthetic fixture mirroring the real Workday `*.htmld` widget-tree shape
 // captured from a live tenant (values invented — no real data). Structure is
@@ -179,6 +179,71 @@ const listCardTask = {
     ],
   },
 };
+
+describe('parseApps', () => {
+  // Mirrors the real quickaccess tree: nested widget/children with
+  // configuredAppsItem leaves carrying label + taskIid (some repeated).
+  const appsTree = {
+    widget: 'quickAccessAndConfiguredApps',
+    children: [
+      {
+        widget: 'configuredApps',
+        children: [
+          { widget: 'configuredAppsItem', label: 'Personal Information', taskIid: '2997$2151' },
+          { widget: 'configuredAppsItem', label: 'Benefits and Pay', taskIid: '2998$43525' },
+          // duplicate label — deduped
+          { widget: 'configuredAppsItem', label: 'Benefits and Pay', taskIid: '2998$43525' },
+          { widget: 'configuredAppsItem', label: 'Directory', taskIid: '2997$2151' },
+        ],
+      },
+      { widget: 'upcApp', redirectUri: '/somewhere' }, // not a configured app — ignored
+    ],
+  };
+
+  it('extracts deduped {label, taskId} apps from the menu tree', () => {
+    expect(parseApps(appsTree)).toEqual([
+      { label: 'Personal Information', taskId: '2997$2151' },
+      { label: 'Benefits and Pay', taskId: '2998$43525' },
+      { label: 'Directory', taskId: '2997$2151' },
+    ]);
+  });
+
+  it('is defensive against malformed input', () => {
+    expect(parseApps(null)).toEqual([]);
+    expect(parseApps({})).toEqual([]);
+  });
+});
+
+describe('parseTask — title and link widgets', () => {
+  it('reads a title given as a {text} widget object, not just a string', () => {
+    expect(parseTask({ title: { text: 'Execute Worklet', widget: 'titleStaticText' } }).title).toBe(
+      'Execute Worklet'
+    );
+    expect(parseTask({ title: 'Plain String' }).title).toBe('Plain String');
+  });
+
+  it('collects link widgets in a section as navigable references', () => {
+    const task = {
+      body: {
+        cardContentSections: [
+          {
+            contentSectionName: 'Quick Actions',
+            contentSectionItems: [
+              { widget: 'link', label: 'View Payslips', uri: '/acme/task/2998$1.htmld', rel: 'task' },
+              { widget: 'link', text: 'Time Off', uri: '/acme/task/2998$2.htmld' },
+              { widget: 'link', label: 'no uri', rel: 'noop' }, // skipped — no uri
+            ],
+          },
+        ],
+      },
+    };
+    const sec = parseTask(task).sections[0];
+    expect(sec.references).toEqual([
+      { label: 'View Payslips', uri: '/acme/task/2998$1.htmld' },
+      { label: 'Time Off', uri: '/acme/task/2998$2.htmld' },
+    ]);
+  });
+});
 
 describe('parseTask — list cards', () => {
   const parsed = parseTask(listCardTask);

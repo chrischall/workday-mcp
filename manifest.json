@@ -47,8 +47,12 @@
   },
   "tools": [
     {
+      "name": "workday_get_apps",
+      "description": "List your Workday apps with a launchable task id — the discovery entry point"
+    },
+    {
       "name": "workday_get_task",
-      "description": "Read a Workday task or data card by path — title, fields, references, related tasks"
+      "description": "Read a Workday task or data card by path or task id — title, fields, references"
     },
     {
       "name": "workday_healthcheck",
