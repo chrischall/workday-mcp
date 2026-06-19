@@ -212,6 +212,15 @@ describe('parseApps', () => {
     expect(parseApps(null)).toEqual([]);
     expect(parseApps({})).toEqual([]);
   });
+
+  it('omits taskId when the taskIid is empty (no `taskId: ""`)', () => {
+    expect(
+      parseApps({
+        widget: 'configuredApps',
+        children: [{ widget: 'configuredAppsItem', label: 'Edgey App', taskIid: '' }],
+      })
+    ).toEqual([{ label: 'Edgey App' }]);
+  });
 });
 
 describe('parseTask — title and link widgets', () => {
