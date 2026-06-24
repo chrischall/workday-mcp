@@ -3,7 +3,7 @@
   "manifest_version": "0.3",
   "name": "workday-mcp",
   "display_name": "Workday",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Read-only Workday access for Claude — fetch your tasks, pay, benefits and compensation data through your signed-in session",
   "author": {
     "name": "Chris Chall",
@@ -17,13 +17,20 @@
   "homepage": "https://github.com/chrischall/workday-mcp",
   "support": "https://github.com/chrischall/workday-mcp/issues",
   "license": "MIT",
-  "keywords": ["workday", "hr", "payroll", "benefits"],
+  "keywords": [
+    "workday",
+    "hr",
+    "payroll",
+    "benefits"
+  ],
   "server": {
     "type": "node",
     "entry_point": "dist/bundle.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/dist/bundle.js"],
+      "args": [
+        "${__dirname}/dist/bundle.js"
+      ],
       "env": {
         "WORKDAY_TENANT": "${user_config.tenant}",
         "WORKDAY_HOST": "${user_config.host}"
