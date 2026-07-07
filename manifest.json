@@ -3,7 +3,7 @@
   "manifest_version": "0.3",
   "name": "workday-mcp",
   "display_name": "Workday",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Read-only Workday access for Claude — fetch your tasks, pay, benefits and compensation data through your signed-in session",
   "author": {
     "name": "Chris Chall",
