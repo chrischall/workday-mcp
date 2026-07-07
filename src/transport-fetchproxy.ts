@@ -13,6 +13,7 @@
 // `FetchproxyBridgeDownError` / `FetchproxyTimeoutError` (both subclasses of
 // `FetchproxyProtocolError`) on failure.
 
+import { splitHost } from '@chrischall/mcp-utils';
 import {
   createFetchproxyTransport,
   type FetchproxyTransport as FetchproxyVerbTransport,
@@ -35,6 +36,11 @@ export {
   FetchproxyTimeoutError,
   FetchproxyProtocolError,
   classifyBridgeError,
+  // The shared `splitHost` (last-two-labels split) — re-exported so the
+  // transport's tests and any importer keep resolving it from this module. For
+  // real Workday data-center hosts (`wd5.myworkday.com`) it is identical to the
+  // former local implementation.
+  splitHost,
 };
 export type { BridgeError };
 
@@ -44,18 +50,6 @@ const DEBUG = process.env.WORKDAY_DEBUG === '1';
 
 function log(...args: unknown[]): void {
   if (DEBUG) console.error('[workday-mcp:bridge]', ...args);
-}
-
-/** Split a tenant host (`wd5.myworkday.com`) into the registrable domain
- *  (`myworkday.com`) and the data-center subdomain (`wd5`). Falls back
- *  gracefully for unexpected host shapes. */
-export function splitHost(host: string): { domain: string; subdomain?: string } {
-  const parts = host.split('.').filter(Boolean);
-  if (parts.length <= 2) return { domain: host };
-  return {
-    subdomain: parts[0],
-    domain: parts.slice(1).join('.'),
-  };
 }
 
 export interface FetchproxyTransportOptions {

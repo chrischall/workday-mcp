@@ -9,7 +9,7 @@
 //   - error mapping: non-2xx, the SSO/sign-in bounce (expired session), and
 //     non-JSON bodies all become typed, actionable errors here so tool authors
 //     never handle them.
-import { formatApiError, readEnvVar } from '@chrischall/mcp-utils';
+import { formatApiError, readEnvVar, SessionNotAuthenticatedError } from '@chrischall/mcp-utils';
 import type {
   BridgeProbeResult,
   BridgeStatus,
@@ -20,16 +20,11 @@ import { parseTask, parseApps, type WorkdayTask, type WorkdayApp } from './parse
 
 const DEFAULT_HOST = 'wd5.myworkday.com';
 
-export class SessionNotAuthenticatedError extends Error {
-  constructor(host: string) {
-    super(
-      `Not signed in to Workday (or the session expired). Open https://${host} in your ` +
-        `browser, complete the SSO sign-in, and try again. Every workday-mcp request rides ` +
-        `your live, signed-in browser tab — there is no separate server-side login.`
-    );
-    this.name = 'SessionNotAuthenticatedError';
-  }
-}
+// Re-export the shared "go authenticate" error so tool code (and the
+// healthcheck's `instanceof` classifier) keeps importing it from here. The
+// Workday-specific SSO re-sign-in copy now lives in the healthcheck's
+// `classifyThrown` hint rather than in the error message.
+export { SessionNotAuthenticatedError };
 
 export class WorkdayConfigError extends Error {
   constructor(message: string) {
@@ -174,7 +169,7 @@ export class WorkdayClient {
   private throwIfNotOk(result: FetchResult, method: string, path: string): void {
     if (result.status >= 200 && result.status < 300) return;
     if (result.status === 401 || result.status === 403) {
-      throw new SessionNotAuthenticatedError(this.host);
+      throw new SessionNotAuthenticatedError('Workday', this.host);
     }
     const collapsed = result.body.replace(/\s+/g, ' ').trim();
     throw new Error(
@@ -202,6 +197,6 @@ export class WorkdayClient {
           result.body
         ) &&
         result.body.length < 200_000);
-    if (looksLikeSso) throw new SessionNotAuthenticatedError(this.host);
+    if (looksLikeSso) throw new SessionNotAuthenticatedError('Workday', this.host);
   }
 }
