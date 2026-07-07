@@ -36,3 +36,9 @@ See `docs/WORKDAY-API.md` for the captured endpoint shapes and the widget schema
 - Never commit secrets or captured tokens/cookies/values. `.env` is gitignored.
 - Don't merge PRs or add `ready-to-merge` yourself; `pr-auto-review` +
   `auto-merge` ship it.
+
+## Pull requests & release notes
+
+Apply exactly one release-notes label per PR (`enhancement` → Features, `bug` → Bug Fixes, `dependencies` → Dependencies, etc.), and give the PR a Conventional-Commit title — release-please parses the squash subject to pick the version bump and changelog section.
+
+**Exception for first-party dependency bumps.** When bumping a package we own (`@chrischall/mcp-utils`, `@chrischall/realty-core`, `@fetchproxy/server` — anything published from a chrischall-owned repo), label the PR `enhancement` or `bug` instead of `dependencies`, and use the matching Conventional-Commit prefix (`feat:` or `fix:`) instead of `chore:`/`build(deps):`. Those bumps deliver real product fixes or features through us, so they should drive a release-please version bump and show up under Features/Bug Fixes in the release notes — not get hidden under "Dependencies" (which doesn't trigger a release).
