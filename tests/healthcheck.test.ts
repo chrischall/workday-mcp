@@ -42,7 +42,11 @@ class ProbeTransport implements WorkdayTransport {
     probePath: string,
   ): Promise<BridgeProbeResult> {
     const bridge = {
-      role: this.scn.role ?? 'host',
+      // Pass the scenario's role through faithfully. An OMITTED role defaults to
+      // 'host'; an EXPLICIT role — including `null` — flows through untouched, so
+      // the bridge_down / null-role case is genuinely exercised (was masked by a
+      // `?? 'host'` coalesce that silently turned null into 'host').
+      role: 'role' in this.scn ? this.scn.role : 'host',
       port: 37_149,
       server_version: '0.2.0',
       fetch_timeout_ms: 30_000,
@@ -123,6 +127,10 @@ describe('workday_healthcheck', () => {
     })();
     expect(result.ok).toBe(false);
     expect(result.error.kind).toBe('bridge_down');
+    // The null role must flow through to the projected bridge snapshot — the
+    // bridge can hand back the SW-eviction error before listen() resolves a role.
+    expect(result.bridge.role).toBeNull();
+    // bridge_down's specific hint still wins over the null-role fallback.
     expect(result.hint).toMatch(/service worker/i);
   });
 });
