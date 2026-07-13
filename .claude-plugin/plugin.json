@@ -17,6 +17,6 @@
     "benefits",
     "mcp"
   ],
-  "skills": "./SKILL.md",
+  "skills": "./skills/",
   "mcp": "./.mcp.json"
 }

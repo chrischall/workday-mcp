@@ -23,7 +23,7 @@ is their **live browser session**, which is what this server relays.
 
 ## Install
 
-See [SKILL.md](./SKILL.md) for full setup. In brief:
+See [SKILL.md](./skills/workday-mcp/SKILL.md) for full setup. In brief:
 
 ```json
 {
