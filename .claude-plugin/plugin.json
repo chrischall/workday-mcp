@@ -1,7 +1,7 @@
 {
   "name": "workday-mcp",
   "displayName": "Workday",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Read-only Workday access for Claude — fetch your tasks, pay, benefits and compensation through your signed-in session",
   "author": {
     "name": "Chris Hall",

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0](https://github.com/chrischall/workday-mcp/compare/v0.2.1...v0.3.0) (2026-07-13)
+
+
+### Features
+
+* **skill:** add workday fpx access skill ([#18](https://github.com/chrischall/workday-mcp/issues/18)) ([fdaf250](https://github.com/chrischall/workday-mcp/commit/fdaf250a7393b7b0d33da2528adc274837a32cec))
+
+
+### Bug Fixes
+
+* **skill:** restrict list-card drill-in jq to navigational columns ([#22](https://github.com/chrischall/workday-mcp/issues/22)) ([5ee48fa](https://github.com/chrischall/workday-mcp/commit/5ee48fa5528a0912107783676fafb16b405734d9)), closes [#19](https://github.com/chrischall/workday-mcp/issues/19)
+
+
+### Refactor
+
+* **skill:** move root SKILL.md into skills/, point plugin.json at ./skills/ ([#21](https://github.com/chrischall/workday-mcp/issues/21)) ([e748d3d](https://github.com/chrischall/workday-mcp/commit/e748d3db4cbcd0393e178ad3f509d88f91480050))
+
 ## [0.2.1](https://github.com/chrischall/workday-mcp/compare/v0.2.0...v0.2.1) (2026-07-07)
 
 
