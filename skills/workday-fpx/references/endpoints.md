@@ -95,7 +95,10 @@ Drill-in references for a row come from its navigational columns only
 
 ```sh
 fpx get "https://$HOST/$TENANT/card/all/<cardId>/<pageCtx>.htmld" -p workday | jq '
-  [.. | objects | select(.widget=="text" or .widget=="moniker") | select(.widget=="moniker") | {text, instanceId}]'
+  [.body.cardContentSections[]?.contentSectionItems[]?
+   | (.task, .onInstance, .relatedTaskInstance, .quicklinkItem)?
+   | select(. != null)
+   | .. | objects | select(.widget=="moniker") | {text, instanceId}]'
 ```
 
 ## 5. Healthcheck probe (tiny authenticated endpoint)
