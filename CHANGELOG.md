@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/chrischall/workday-mcp/compare/v0.3.1...v0.3.2) (2026-08-06)
+
+
+### Bug Fixes
+
+* **deps:** move to @fetchproxy/server 2.0.0 for the v3 handshake ([#39](https://github.com/chrischall/workday-mcp/issues/39)) ([44eb133](https://github.com/chrischall/workday-mcp/commit/44eb133a7beb1ddaceaa70e8b8c93c022b7d699f))
+
 ## [0.3.1](https://github.com/chrischall/workday-mcp/compare/v0.3.0...v0.3.1) (2026-07-30)
 
 
