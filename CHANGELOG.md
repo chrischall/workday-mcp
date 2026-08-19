@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.0](https://github.com/chrischall/workday-mcp/compare/v0.3.2...v0.4.0) (2026-08-19)
+
+
+### Features
+
+* add org chart, worker profile, and app-hub reads to the read-only API ([#45](https://github.com/chrischall/workday-mcp/issues/45)) ([a7e5cc1](https://github.com/chrischall/workday-mcp/commit/a7e5cc16ad3dfe51434f8cc1c75e71985d55d33b))
+
+
+### Bug Fixes
+
+* refuse GraphQL documents whose definition boundaries cannot be tracked ([#48](https://github.com/chrischall/workday-mcp/issues/48)) ([06453f5](https://github.com/chrischall/workday-mcp/commit/06453f550eb1a80491ee29db8b48b5f2b1a6ec6f))
+
+
+### Documentation
+
+* correct the stale SDL claim in the read-only guard comment ([#50](https://github.com/chrischall/workday-mcp/issues/50)) ([9759c24](https://github.com/chrischall/workday-mcp/commit/9759c24a8a89b1212a7c379a937843fd5163f69e)), closes [#49](https://github.com/chrischall/workday-mcp/issues/49)
+
 ## [0.3.2](https://github.com/chrischall/workday-mcp/compare/v0.3.1...v0.3.2) (2026-08-06)
 
 
