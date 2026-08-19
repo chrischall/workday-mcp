@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   WorkdayClient,
   WorkdayConfigError,
@@ -48,6 +48,17 @@ describe('stripJsonGuard', () => {
 });
 
 describe('WorkdayClient deferred config', () => {
+  // These assert the UNCONFIGURED path, so a WORKDAY_TENANT exported in the
+  // developer's shell (or CI) must not silently configure them out of it.
+  const saved = process.env.WORKDAY_TENANT;
+  beforeEach(() => {
+    delete process.env.WORKDAY_TENANT;
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.WORKDAY_TENANT;
+    else process.env.WORKDAY_TENANT = saved;
+  });
+
   it('boots without a tenant but throws WorkdayConfigError on use', () => {
     const transport = new FakeTransport();
     const client = new WorkdayClient({ transport, tenant: undefined, host: 'wd5.myworkday.com' });
@@ -74,6 +85,18 @@ describe('WorkdayClient.resolvePath', () => {
   it('resolves a bare task id to the constructable task endpoint', () => {
     expect(client.resolvePath('2998$43525')).toBe('/acme/task/2998$43525.htmld');
     expect(client.resolvePath(' 14860$79 ')).toBe('/acme/task/14860$79.htmld');
+  });
+  it('appends .htmld to an extensionless data path — Workday 404s the bare form', () => {
+    expect(client.resolvePath('/acme/inst/1$715/247$42')).toBe('/acme/inst/1$715/247$42.htmld');
+    expect(client.resolvePath('/acme/inst/1508$9/rel-task/2998$6374')).toBe(
+      '/acme/inst/1508$9/rel-task/2998$6374.htmld'
+    );
+  });
+  it('leaves a path that already has an extension, and a query string, alone', () => {
+    expect(client.resolvePath('/acme/quickaccess/fetch.htmld?shouldFetchUpcApps=true')).toBe(
+      '/acme/quickaccess/fetch.htmld?shouldFetchUpcApps=true'
+    );
+    expect(client.resolvePath('/acme/export/c10.xlsx')).toBe('/acme/export/c10.xlsx');
   });
 });
 
@@ -182,6 +205,8 @@ describe('WorkdayClient.getTask', () => {
     expect(task.sections[0]).toEqual({
       name: 'Salary',
       fields: [{ label: 'Annual', value: '$120,000.00' }],
+      // flat field card — no list rows
+      rows: [],
       references: [],
     });
     expect(JSON.stringify(task)).not.toContain('LEAK-ME-NOT');

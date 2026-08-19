@@ -7,15 +7,29 @@ every request rides the user's signed-in `*.myworkday.com` tab.
 ## Architecture
 
 - `src/parse.ts` — **the durable core.** Parses Workday's `*.htmld` widget-tree
-  JSON into a flat, secret-free `WorkdayTask`. Handles both flat field cards and
-  list/table cards (row objects keyed by clean column names — `label`/`value` —
-  whose `propertyName` is namespaced like `wd:Label`; key on the object key, NOT
-  propertyName). **Never emits `sessionSecureToken` or other envelope secrets**
-  — it reads an explicit allowlist of fields only.
+  JSON into a flat, secret-free `WorkdayTask`, tagged with a `kind`. Handles all
+  seven page families: data cards (flat + list rows), `grid` tables,
+  `fieldSet`/`panel` detail pages, `compositeView` worker profiles,
+  `hierarchyNavigator` org charts, `landingPage` hubs, and report prompt forms.
+  Row objects are keyed by clean column names (`label`/`value`) whose
+  `propertyName` is namespaced like `wd:Label` — key on the object key, NOT
+  propertyName. Uri templates come in three dialects (`{id}`, `[IID]`,
+  already-concrete) and a `moniker.target` (URL-encoded absolute) beats a
+  template. Most uris need `.htmld` appended or they 404. **Never emits
+  `sessionSecureToken` or other envelope secrets** — it reads an explicit
+  allowlist of fields only.
+- `src/redact.ts` — the DUAL of the parser's allowlist: a denylist applied to
+  raw envelopes returned by `workday_fetch` / `workday_graphql`, covering secret
+  key names plus values whose sibling `label` names government/financial PII.
 - `src/client.ts` — deferred config (`WORKDAY_TENANT` required, `WORKDAY_HOST`
-  defaulted), one `fetchJson` primitive, path normalization (strips `#fragments`,
-  converts copied `/d/` SPA URLs to data endpoints), and error mapping
-  (non-2xx, SSO/sign-in bounce → `SessionNotAuthenticatedError`).
+  defaulted), the `fetchJson`/`postJson` primitives, path normalization (strips
+  `#fragments`, converts copied `/d/` SPA URLs to data endpoints, appends
+  `.htmld`), error mapping (non-2xx, SSO/sign-in bounce →
+  `SessionNotAuthenticatedError`), and the composed reads: `crawl` (hub → child
+  cards, bounded by depth/maxCards/visited), `resolveApp`/`openApp` (by LABEL,
+  never a captured id), `getWorker`/`getWorkerTask`/`getOrgChart`, and a
+  query-only `graphql`. **Tenant-specific ids are learned at runtime** — the
+  worker-profile uri prefix comes from a live org-chart node, never a constant.
 - `src/transport-fetchproxy.ts` — wraps `@chrischall/mcp-utils/fetchproxy`;
   `splitHost` maps `wd5.myworkday.com` → domain `myworkday.com` + subdomain `wd5`.
 - `src/tools/*.ts` — `registerXxxTools(server, client)` → `server.registerTool`.

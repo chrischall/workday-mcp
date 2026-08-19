@@ -43,11 +43,51 @@ export function registerTaskTools(server: McpServer, client: WorkdayClient): voi
             'Workday data endpoint path, e.g. `/acme/inst/13102!ABC/cacheable-task/2998$43525.htmld`, ' +
               'or a copied `/acme/d/...` SPA URL, or a bare suffix like `quickaccess/fetch.htmld`.'
           ),
+        expand: z
+          .boolean()
+          .optional()
+          .describe(
+            'Follow the page down to the child cards holding its real content. Turn this on when ' +
+              'a page comes back with no sections — container/hub pages delegate everything to ' +
+              'children whose uris exist only inside the parent response.'
+          ),
+        depth: z
+          .number()
+          .int()
+          .min(0)
+          .max(3)
+          .optional()
+          .describe(
+            'Levels to follow (default 1). Supplying this implies `expand` unless ' +
+              '`expand: false` is passed explicitly.'
+          ),
+        maxCards: z
+          .number()
+          .int()
+          .min(1)
+          .max(40)
+          .optional()
+          .describe(
+            'Cap on child cards fetched (default 12). Supplying this implies `expand` ' +
+              'unless `expand: false` is passed explicitly.'
+          ),
       },
     },
-    async ({ path }) => {
-      const task = await client.getTask(path);
-      return textResult(task);
+    async ({ path, expand, depth, maxCards }) => {
+      // An explicit `expand` always wins — including `expand: false`, which
+      // must NOT crawl however the other knobs are set. Otherwise, supplying
+      // either crawl knob is taken as asking to expand, so `maxCards` alone is
+      // no longer silently ignored.
+      const shouldCrawl = expand ?? (depth !== undefined || maxCards !== undefined);
+      if (!shouldCrawl) {
+        const task = await client.getTask(path);
+        return textResult(task);
+      }
+      const page = await client.crawl(path, {
+        ...(depth !== undefined ? { depth } : {}),
+        ...(maxCards !== undefined ? { maxCards } : {}),
+      });
+      return textResult(page);
     }
   );
 }

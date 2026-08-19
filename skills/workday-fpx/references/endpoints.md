@@ -3,15 +3,17 @@
 Ready-to-run paths for `fpx get '<url>' -p workday`. All shapes are
 live-verified in the repo (`src/client.ts`, `src/tools/*.ts`,
 `docs/WORKDAY-API.md`) against a production tenant on `wd5.myworkday.com`
-(2026-06). Replace `wd5.myworkday.com`/`acme` with your own
-`$HOST`/`$TENANT`.
+(cards 2026-06, the manager surfaces 2026-08). Replace
+`wd5.myworkday.com`/`acme` with your own `$HOST`/`$TENANT`.
 
 Every response is a `root` envelope: page chrome (`title`, `taskId`,
 `tenant`, `currentUser`, `accountTasks`, `header` export links,
-**`sessionSecureToken` — SECRET, never project this**) plus a `body.
-cardContentSections[]` tree of `text` / `moniker` / `monikerList` leaf
-widgets. **Always pipe through one of the filters below — never bare
-`jq '.'`.**
+**`sessionSecureToken` — SECRET, never project this**) plus a `body`.
+**`body` is NOT always `cardContentSections`** — Workday serves seven page
+families (data card, `grid`, form/`fieldSet`, `compositeView` worker profile,
+`hierarchyNavigator` org chart, `landingPage` hub, and report prompt forms),
+so a page that looks empty under a `cardContentSections` filter usually is
+not. **Always pipe through one of the filters below — never bare `jq '.'`.**
 
 ---
 
@@ -101,7 +103,74 @@ fpx get "https://$HOST/$TENANT/card/all/<cardId>/<pageCtx>.htmld" -p workday | j
    | .. | objects | select(.widget=="moniker") | {text, instanceId}]'
 ```
 
-## 5. Healthcheck probe (tiny authenticated endpoint)
+## 5. Worker profile → the drill-in catalog (the manager surface)
+
+```
+GET https://$HOST/$TENANT/inst/<workerCtx>/<workerIid>.htmld
+```
+
+Returns "View Associate": a `compositeView` listing ~40 named, fetchable tasks
+across 9 sections. `<workerCtx>` differs per tenant — read it off an org-chart
+node's concrete profile uri (endpoint 6) rather than guessing.
+
+```sh
+fpx get "https://$HOST/$TENANT/inst/1\$715/247\$42.htmld" -p workday | jq '
+  [.. | objects | select(.widget=="compositeViewSection")
+   | {section: .label,
+      tasks: [.taskNodes | .. | objects | select(.widget=="compositeViewTask")
+              | {label, uri: (.uri + ".htmld")}]}]'
+```
+
+Then fetch any of those uris (**`.htmld` must be appended — the bare form 404s**):
+
+```
+GET https://$HOST/$TENANT/inst/<ctx>/rel-task/<taskId>.htmld
+```
+
+## 6. Org chart (the reporting chain)
+
+```
+GET https://$HOST/$TENANT/task/<orgChartTaskId>.htmld
+```
+
+Get `<orgChartTaskId>` from endpoint 1 (the app labelled "Org Chart").
+
+```sh
+fpx get "https://$HOST/$TENANT/task/2998\$2673.htmld" -p workday | jq '
+  [.. | objects | select(.widget=="hierarchyNavigator")
+   | {workerIid,
+      chain: [.ancestors[]? | {
+        name:  (.navigatorInstance.instances[0].text // null),
+        profileUri: (.navigatorInstance.selfUriTemplate + ".htmld"),
+        title: (.navigatorItems[0].detailOne // null),
+        location: (.navigatorItems[0].detailTwo // null),
+        reports: (.navigatorItems[0].detailThree // null)}]}]'
+```
+
+`selfUriTemplate` is already CONCRETE here (one uri per person) — this is where
+the `<workerCtx>` for endpoint 5 comes from. Note the chain runs UPWARD only;
+expanding DOWN to direct reports is a POST-only navigation and 404s on GET.
+
+## 7. Grids (real tables)
+
+Many pages return a `grid` rather than card sections. Cells are keyed by an
+opaque `columnId`, so join to `columns[]`:
+
+```sh
+fpx get "https://$HOST/$TENANT/inst/<ctx>/rel-task/<taskId>.htmld" -p workday | jq '
+  [.. | objects | select(.widget=="grid") | . as $g
+   | ($g.columns | map({key: .columnId, value: .label}) | from_entries) as $cols
+   | {label: $g.label, rows: $g.rowCount, total: $g.deepRowCount,
+      chunkingUrl: $g.chunkingUrl,
+      data: [$g.rows[]? | .cellsMap | with_entries(
+               .key |= ($cols[.] // .)
+             ) | map_values(.value // .instances[0].text // null)]}]'
+```
+
+**`deepRowCount > rowCount` means the grid is CHUNKED** — you have only the
+first page, and `chunkingUrl` serves the rest. Don't report it as complete.
+
+## 8. Healthcheck probe (tiny authenticated endpoint)
 
 ```
 GET https://$HOST/$TENANT/get-global-prefs.htmld?feature=doNotShowMobileAd
@@ -130,11 +199,30 @@ data_url="${url/\/d\///}"   # → .../acme/inst/13102!ABC/cacheable-task/2998$43
 fpx get "$data_url" -p workday | jq '...'
 ```
 
-## Omitted (undiscoverable from the repo)
+## Gotchas that cost real debugging time
 
-- **GraphQL surface** (`/wday/pex/graphql/graphql?operation=...`, POST) —
-  serves the inbox/"My Tasks" and global search, per `docs/WORKDAY-API.md`'s
-  Follow-ons. No captured operation/persisted-query shape exists yet in the
-  repo, so it's left out here rather than guessed.
-- **Writes** — none exist in workday-mcp v1 (read-only); Workday writes are
+- **Most uris arrive WITHOUT `.htmld` and 404 until you append it** — `inst`,
+  `rel-task` and `task` paths alike.
+- **`moniker.target` is the best navigation edge**: a URL-ENCODED ABSOLUTE url.
+  Decode it and drop the `/d/` segment, then it fetches.
+  `jq -r '.target | @uri "\(.)"'` won't do it — use
+  `python3 -c 'import sys,urllib.parse; print(urllib.parse.unquote(sys.stdin.read()))'`.
+- **Uri templates come in three dialects**: `{id}`, `[IID]`, and
+  already-concrete. Substituting only `{id}` yields unfetchable uris.
+- **A page with no `cardContentSections` is not empty** — it is probably a grid,
+  a compositeView, a hierarchyNavigator, a landingPage, or a report PROMPT form
+  (`monikerListInput` / `textInput` widgets, which need a POST of parameters).
+
+## Verified NOT GET-able (don't burn time here)
+
+- `/{tenant}/navigable/<iid>` and `/navigable/bundler` — org-chart expansion to
+  direct reports. POST-only.
+- `/{tenant}/worklet/<workletIid>`, `/{tenant}/print/navigable/...` — 404.
+- `/{tenant}/search.htmld` — returns an empty `federatedSearchResults` shell;
+  `q`, `st`, `searchText`, `query`, `text`, `keyword` and `s` were all tried and
+  none is the query parameter.
+- **GraphQL surface** (`/wday/pex/graphql/graphql?operation=...`, POST) — serves
+  the inbox/"My Tasks" and search. Reachable, but no operation shape is captured
+  in the repo, so it's left out here rather than guessed.
+- **Writes** — none exist in workday-mcp (read-only); Workday writes are
   multi-step business processes, not single POSTs.

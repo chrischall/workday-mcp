@@ -1,4 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
 import { textResult } from '../mcp.js';
 
@@ -29,6 +30,53 @@ export function registerAppsTools(server: McpServer, client: WorkdayClient): voi
     async () => {
       const apps = await client.getApps();
       return textResult({ apps, count: apps.length });
+    }
+  );
+
+  server.registerTool(
+    'workday_open_app',
+    {
+      title: 'Open a Workday app by name',
+      description:
+        'Open one of your Workday apps by name — "My Team Management", "Talent and Performance", ' +
+        '"Time", "Absence", "Benefits and Pay", "Org Chart", "Total Rewards" — and read it, ' +
+        'following the app down to the child cards that hold its real content. Most Workday app ' +
+        'hubs return a near-empty shell on their own; this follows the links for you. ' +
+        'Matched case-insensitively against your own app menu, so it works without knowing any ' +
+        'task ids. Read-only.',
+      annotations: {
+        title: 'Open a Workday app by name',
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+      inputSchema: {
+        app: z
+          .string()
+          .min(1)
+          .describe('App name or a distinctive part of it, e.g. `talent` or `my team`.'),
+        depth: z
+          .number()
+          .int()
+          .min(0)
+          .max(3)
+          .optional()
+          .describe('Levels of child cards to follow (default 1, 0 = the hub page only).'),
+        maxCards: z
+          .number()
+          .int()
+          .min(1)
+          .max(40)
+          .optional()
+          .describe('Cap on child cards fetched (default 12). Each is a real browser fetch.'),
+      },
+    },
+    async ({ app, depth, maxCards }) => {
+      const page = await client.openApp(app, {
+        ...(depth !== undefined ? { depth } : {}),
+        ...(maxCards !== undefined ? { maxCards } : {}),
+      });
+      return textResult(page);
     }
   );
 }
