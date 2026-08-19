@@ -43,11 +43,40 @@ export function registerTaskTools(server: McpServer, client: WorkdayClient): voi
             'Workday data endpoint path, e.g. `/acme/inst/13102!ABC/cacheable-task/2998$43525.htmld`, ' +
               'or a copied `/acme/d/...` SPA URL, or a bare suffix like `quickaccess/fetch.htmld`.'
           ),
+        expand: z
+          .boolean()
+          .optional()
+          .describe(
+            'Follow the page down to the child cards holding its real content. Turn this on when ' +
+              'a page comes back with no sections — container/hub pages delegate everything to ' +
+              'children whose uris exist only inside the parent response.'
+          ),
+        depth: z
+          .number()
+          .int()
+          .min(0)
+          .max(3)
+          .optional()
+          .describe('Levels to follow when `expand` is set (default 1).'),
+        maxCards: z
+          .number()
+          .int()
+          .min(1)
+          .max(40)
+          .optional()
+          .describe('Cap on child cards fetched when expanding (default 12).'),
       },
     },
-    async ({ path }) => {
-      const task = await client.getTask(path);
-      return textResult(task);
+    async ({ path, expand, depth, maxCards }) => {
+      if (!expand && depth === undefined) {
+        const task = await client.getTask(path);
+        return textResult(task);
+      }
+      const page = await client.crawl(path, {
+        ...(depth !== undefined ? { depth } : {}),
+        ...(maxCards !== undefined ? { maxCards } : {}),
+      });
+      return textResult(page);
     }
   );
 }

@@ -3,6 +3,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerHealthcheckTools } from '../src/tools/healthcheck.js';
 import { registerTaskTools } from '../src/tools/task.js';
 import { registerAppsTools } from '../src/tools/apps.js';
+import { registerPeopleTools } from '../src/tools/people.js';
+import { registerRawTools } from '../src/tools/raw.js';
 import { WorkdayClient } from '../src/client.js';
 import type { WorkdayTransport, BridgeStatus, BridgeProbeResult } from '../src/transport.js';
 
@@ -39,6 +41,19 @@ describe('tool registration', () => {
     registerHealthcheckTools(server, client);
     registerAppsTools(server, client);
     registerTaskTools(server, client);
-    expect(names).toEqual(['workday_healthcheck', 'workday_get_apps', 'workday_get_task']);
+    registerPeopleTools(server, client);
+    registerRawTools(server, client);
+    expect(names).toEqual([
+      'workday_healthcheck',
+      'workday_get_apps',
+      'workday_open_app',
+      'workday_get_task',
+      'workday_get_org_chart',
+      'workday_get_worker',
+      'workday_get_worker_task',
+      'workday_get_my_profile',
+      'workday_fetch',
+      'workday_graphql',
+    ]);
   });
 });

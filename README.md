@@ -1,8 +1,8 @@
 # workday-mcp
 
-Read-only MCP server for [Workday](https://www.workday.com/). Fetches your
-Workday tasks and data cards — pay, benefits, compensation — and returns them as
-structured JSON. Every request routes through your own signed-in
+Read-only MCP server for [Workday](https://www.workday.com/). Reads your
+Workday org chart, worker profiles, pay, benefits, performance, and any task or
+data card, and returns them as structured JSON. Every request routes through your own signed-in
 `*.myworkday.com` tab via the [fetchproxy](https://github.com/chrischall/fetchproxy)
 browser extension, reusing your existing SSO-authenticated session.
 
@@ -44,8 +44,32 @@ Then install the fetchproxy extension and sign into Workday in your browser.
 | Tool | What it does |
 | --- | --- |
 | `workday_get_apps` | List your Workday apps with launchable task ids — the discovery entry point |
-| `workday_get_task` | Read a Workday task/data card by task id or path → title, fields, references, related tasks, export links |
+| `workday_open_app` | Open an app **by name** ("Talent and Performance", "Absence") and follow it down to the child cards holding its real content |
+| `workday_get_task` | Read any task/data card by id or path → fields, full table rows, references, related tasks, export links. `expand: true` crawls hub pages |
+| `workday_get_org_chart` | Your reporting chain — each person with title, location, report count, and a `profileUri` to drill into |
+| `workday_get_worker` | A worker's profile: the **catalog** of everything readable about them (9 sections, ~40 named tasks) |
+| `workday_get_worker_task` | Open one named item from that catalog — "Compensation", "Performance Reviews", "Management Chain" |
+| `workday_get_my_profile` | The same catalog, for yourself |
+| `workday_fetch` | Raw `.htmld` read with secrets redacted — the escape hatch for pages the parser doesn't model yet |
+| `workday_graphql` | Read-only GraphQL against Workday's PEX surface (mutations refused). The only route to Inbox / search |
 | `workday_healthcheck` | Verify the bridge + session end-to-end with an actionable hint |
+
+The parser understands seven Workday page families — data cards, **grids**
+(real tables, with chunking and export links), form-style detail pages, worker
+profiles, org charts, app hubs, and report prompt forms — and labels each page
+with its `kind`. See [docs/WORKDAY-API.md](./docs/WORKDAY-API.md).
+
+### Manager quick start
+
+```
+workday_get_org_chart                                   → who reports where, with profileUris
+workday_get_worker         { worker: "<profileUri>" }   → that person's full catalog
+workday_get_worker_task    { worker: "…", task: "Compensation" }
+workday_open_app           { app: "talent" }            → a whole app hub, crawled
+```
+
+All ids are discovered at runtime from your own app menu and org chart — nothing
+tenant-specific is hardcoded, so this works on any Workday tenant.
 
 ## Development
 

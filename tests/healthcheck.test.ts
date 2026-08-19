@@ -113,7 +113,12 @@ describe('workday_healthcheck', () => {
   });
 
   it('surfaces the config error as not_configured when the tenant is unset', async () => {
+    // Guard the UNCONFIGURED path against a WORKDAY_TENANT exported in the
+    // developer's shell, which would otherwise configure the client for real.
+    const saved = process.env.WORKDAY_TENANT;
+    delete process.env.WORKDAY_TENANT;
     const result = await runHealthcheck({ errorKind: 'unknown' }, { tenant: undefined })();
+    if (saved !== undefined) process.env.WORKDAY_TENANT = saved;
     expect(result.ok).toBe(false);
     expect(result.error.kind).toBe('not_configured');
     expect(result.hint).toMatch(/WORKDAY_TENANT/);

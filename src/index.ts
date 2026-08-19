@@ -20,6 +20,8 @@ import { FetchproxyTransport } from './transport-fetchproxy.js';
 import { registerHealthcheckTools } from './tools/healthcheck.js';
 import { registerTaskTools } from './tools/task.js';
 import { registerAppsTools } from './tools/apps.js';
+import { registerPeopleTools } from './tools/people.js';
+import { registerRawTools } from './tools/raw.js';
 import { VERSION } from './version.js';
 
 const DEFAULT_HOST = 'wd5.myworkday.com';
@@ -43,6 +45,8 @@ await runMcp({
     (server) => registerHealthcheckTools(server, client),
     (server) => registerAppsTools(server, client),
     (server) => registerTaskTools(server, client),
+    (server) => registerPeopleTools(server, client),
+    (server) => registerRawTools(server, client),
   ],
   banner:
     `[workday-mcp] v${VERSION} — WebSocket bridge via @fetchproxy/server on 127.0.0.1:${port ?? 37149}. ` +

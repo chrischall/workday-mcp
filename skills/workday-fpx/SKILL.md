@@ -1,9 +1,9 @@
 ---
 name: workday-fpx
 description: >-
-  Read Workday HR data (tasks, pay, benefits, compensation, your app menu)
-  from a shell with the fpx CLI (@fetchproxy/cli) instead of running the
-  workday-mcp server — fetch any *.htmld data endpoint through your own
+  Read Workday HR data (org chart, worker profiles, tasks, pay, benefits,
+  compensation, your app menu) from a shell with the fpx CLI (@fetchproxy/cli)
+  instead of running the workday-mcp server — fetch any *.htmld data endpoint through your own
   signed-in *.myworkday.com tab (SSO/Ping/Okta/Entra already cleared). Use
   when you want Workday data without the MCP, in a script, or on a machine
   where the MCP isn't installed.
@@ -46,8 +46,9 @@ fpx get 'https://wd5.myworkday.com/acme/quickaccess/fetch.htmld?shouldFetchUpcAp
   | jq '[.. | objects | select(.widget=="configuredAppsItem") | {label, taskId: .taskIid}] | unique_by(.label)'
 ```
 
-Ready-to-run endpoint paths (apps list, task/data-card read, healthcheck
-probe) with `jq` projection recipes are in `references/endpoints.md`. The
+Ready-to-run endpoint paths (apps list, task/data-card read, worker profile +
+its ~40-task drill-in catalog, org chart, grid tables, healthcheck probe) with
+`jq` projection recipes are in `references/endpoints.md`. The
 full widget-tree schema and gotchas are captured in the repo at
 `docs/WORKDAY-API.md` — the operations here are the same live-verified
 shapes `src/client.ts` / `src/tools/*.ts` use.
@@ -113,7 +114,8 @@ retry — there's no separate login step for `fpx`.
 - Read-only, and touches only your own data — this is the same surface the
   `workday_*` MCP tools read, not the official admin-only REST/SOAP API.
 - `fpx health -p workday` shows bridge connection state when a call fails.
-- Not yet discoverable from the repo: the modern GraphQL surface
-  (`/wday/pex/graphql/graphql?operation=...`, POST) that serves inbox/search —
-  `docs/WORKDAY-API.md` flags it as unconsumed, so it's omitted here too.
+- Inbox/"My Tasks" and global search have no GET-able endpoint — they are served
+  by the GraphQL surface (`/wday/pex/graphql/graphql?operation=...`, POST). See
+  `references/endpoints.md` for what else was verified NOT GET-able, so you
+  don't re-probe it.
 - This project is developed and maintained by AI (Claude).

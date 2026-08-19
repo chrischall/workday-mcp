@@ -79,9 +79,20 @@ describe('server boot (bundled artifact, no node_modules)', () => {
       child.stdin.write(rpc(2, 'tools/list', {}));
     });
 
-    expect(tools).toContain('workday_healthcheck');
-    expect(tools).toContain('workday_get_apps');
-    expect(tools).toContain('workday_get_task');
-    expect(tools.length).toBeGreaterThanOrEqual(3);
+    for (const name of [
+      'workday_healthcheck',
+      'workday_get_apps',
+      'workday_open_app',
+      'workday_get_task',
+      'workday_get_org_chart',
+      'workday_get_worker',
+      'workday_get_worker_task',
+      'workday_get_my_profile',
+      'workday_fetch',
+      'workday_graphql',
+    ]) {
+      expect(tools).toContain(name);
+    }
+    expect(tools.length).toBeGreaterThanOrEqual(10);
   });
 });
