@@ -193,6 +193,35 @@ function isNameChar(ch: string): boolean {
 }
 
 /**
+ * GraphQL type-system (SDL) definition keywords.
+ *
+ * These matter because several of them — `scalar`, `union`, `directive`,
+ * `extend` — end WITHOUT a top-level `}`. The definition tracker below re-arms
+ * on a closing top-level brace, so a braceless SDL definition would leave it
+ * disarmed and a following `mutation` would go unseen. Rather than model every
+ * SDL termination rule, a document containing any of these is refused as
+ * unverifiable: Workday executes queries, not schema definitions, so this costs
+ * nothing real and keeps the guard fail-closed instead of guessing.
+ */
+const TYPE_SYSTEM_KEYWORDS = new Set([
+  'schema',
+  'scalar',
+  'type',
+  'interface',
+  'union',
+  'enum',
+  'input',
+  'directive',
+  'extend',
+]);
+
+/** Outcome of scanning a lexed document for write operations. */
+type WriteScan =
+  | { kind: 'read' }
+  | { kind: 'write'; keyword: string }
+  | { kind: 'unverifiable'; keyword: string };
+
+/**
  * Find a write operation by TOKEN POSITION rather than by pattern.
  *
  * Every regex attempt at this failed for the same reason: it enumerated the
@@ -209,7 +238,7 @@ function isNameChar(ch: string): boolean {
  *
  * Returns the offending keyword, or null when the document is read-only.
  */
-function findWriteOperation(cleaned: string): string | null {
+function findWriteOperation(cleaned: string): WriteScan {
   let i = 0;
   let braceDepth = 0;
   let parenDepth = 0;
@@ -257,7 +286,12 @@ function findWriteOperation(cleaned: string): string | null {
         // direction. Only the FIRST token of a definition is tested, so
         // `type Mutation`, `fragment Mutation` and `query mutation` are fine.
         const keyword = cleaned.slice(i, j).toLowerCase();
-        if (keyword === 'mutation' || keyword === 'subscription') return keyword;
+        if (keyword === 'mutation' || keyword === 'subscription') {
+          return { kind: 'write', keyword };
+        }
+        if (TYPE_SYSTEM_KEYWORDS.has(keyword)) {
+          return { kind: 'unverifiable', keyword };
+        }
         atDefinitionStart = false;
       }
       i = j;
@@ -266,7 +300,7 @@ function findWriteOperation(cleaned: string): string | null {
     if (braceDepth === 0 && parenDepth === 0) atDefinitionStart = false;
     i++;
   }
-  return null;
+  return { kind: 'read' };
 }
 
 /** Throw unless `query` declares only read operations. workday-mcp is
@@ -285,11 +319,18 @@ export function assertReadOnlyGraphql(query: string): void {
         'unterminated string literal. Fix the quoting and retry.'
     );
   }
-  const writeOp = findWriteOperation(cleaned);
-  if (writeOp) {
+  const scan = findWriteOperation(cleaned);
+  if (scan.kind === 'write') {
     throw new Error(
-      `workday-mcp is read-only: the GraphQL document declares a \`${writeOp}\` ` +
+      `workday-mcp is read-only: the GraphQL document declares a \`${scan.keyword}\` ` +
         'operation. Only `query` operations are allowed.'
+    );
+  }
+  if (scan.kind === 'unverifiable') {
+    throw new Error(
+      `workday-mcp could not verify this GraphQL document is read-only: it contains a ` +
+        `\`${scan.keyword}\` type-system definition, whose extent cannot be tracked reliably. ` +
+        'Send only executable operations (`query` / `fragment`).'
     );
   }
 }
