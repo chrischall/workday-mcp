@@ -284,7 +284,10 @@ function findWriteOperation(cleaned: string): WriteScan {
         // Compared case-insensitively: GraphQL keywords are lowercase, so a
         // capitalised variant cannot parse anyway, and refusing it is the safe
         // direction. Only the FIRST token of a definition is tested, so
-        // `type Mutation`, `fragment Mutation` and `query mutation` are fine.
+        // `fragment Mutation` and `query mutation` are fine — the name of an
+        // operation or fragment is never examined. (`type Mutation` is NOT
+        // fine, but for an unrelated reason: `type` is a type-system keyword,
+        // refused just below.)
         const keyword = cleaned.slice(i, j).toLowerCase();
         if (keyword === 'mutation' || keyword === 'subscription') {
           return { kind: 'write', keyword };

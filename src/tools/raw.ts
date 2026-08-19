@@ -63,7 +63,7 @@ export function registerRawTools(server: McpServer, client: WorkdayClient): void
         '(`/wday/pex/graphql`). This is the only route to surfaces that have no GET-able ' +
         '`.htmld` endpoint — notably the Inbox / "My Tasks" and global search. Workday does ' +
         'not publish these operations, so you supply the document; expect to iterate. ' +
-        '`mutation` and `subscription` documents are REFUSED — this server is read-only.',
+        '`mutation` and `subscription` documents are REFUSED — this server is read-only — as are type-system (SDL) documents, whose definition boundaries cannot be tracked reliably.',
       annotations: {
         title: 'Run a Workday GraphQL query',
         readOnlyHint: true,
