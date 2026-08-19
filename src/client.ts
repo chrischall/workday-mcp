@@ -92,27 +92,91 @@ export function stripJsonGuard(body: string): string {
   return start > 0 ? body.slice(start) : body;
 }
 
-/** Remove string literals and comments so an operation-keyword scan cannot be
- *  fooled by the word `mutation` appearing inside either.
+/** Outcome of lexing a GraphQL document down to its executable text. */
+interface GraphqlLex {
+  /** The document with every comment and string literal blanked out. */
+  cleaned: string;
+  /** True when a string or block string was never closed, so the document
+   *  cannot be lexed with confidence. */
+  unterminated: boolean;
+}
+
+/**
+ * Lex a GraphQL document, blanking comments and string literals, so an
+ * operation-keyword scan cannot be fooled by the word `mutation` inside either.
  *
- *  ORDER IS LOAD-BEARING. Stripping comments first lets a `#` *inside a string*
- *  blank the rest of the line — so `query Q { f(a: "#") } mutation Evil { … }`
- *  would have had its `mutation` erased before the scan ever saw it, while the
- *  ORIGINAL document (still the thing POSTed) executes the write. Strings are
- *  therefore consumed first — block strings, then quoted ones — and only what
- *  survives can introduce a comment. */
-function stripGraphqlNoise(query: string): string {
-  return query
-    .replace(/"""[\s\S]*?"""/g, ' ')
-    .replace(/"(?:[^"\\\n]|\\.)*"/g, ' ')
-    .replace(/#[^\n]*/g, ' ');
+ * An explicit single left-to-right scan, deliberately NOT a sequence of regex
+ * replaces. Any sequential order has a hole, because each pass is blind to the
+ * construct the other owns:
+ *   - comments first → a `#` inside a STRING blanks the rest of the line,
+ *     hiding a same-line `mutation`;
+ *   - strings first  → a `"""` inside a COMMENT opens a block string running to
+ *     a `"""` in a later comment, swallowing the `mutation` between them.
+ * A single alternation fixes both but still mis-reads an UNTERMINATED `"""`:
+ * the quotes re-pair under a different reading and the document looks clean.
+ * Scanning once, the way a real lexer does — whichever construct starts first
+ * consumes its own content — is the only reading that cannot be gamed, and it
+ * can also SAY when the document does not lex.
+ */
+function lexGraphql(query: string): GraphqlLex {
+  let cleaned = '';
+  let i = 0;
+  while (i < query.length) {
+    if (query.startsWith('"""', i)) {
+      const end = query.indexOf('"""', i + 3);
+      if (end < 0) return { cleaned, unterminated: true };
+      cleaned += ' ';
+      i = end + 3;
+      continue;
+    }
+    if (query[i] === '"') {
+      let j = i + 1;
+      let closed = false;
+      // A single-quoted GraphQL string cannot span a newline.
+      while (j < query.length && query[j] !== '\n') {
+        if (query[j] === '\\') {
+          j += 2;
+          continue;
+        }
+        if (query[j] === '"') {
+          closed = true;
+          break;
+        }
+        j++;
+      }
+      if (!closed) return { cleaned, unterminated: true };
+      cleaned += ' ';
+      i = j + 1;
+      continue;
+    }
+    if (query[i] === '#') {
+      const nl = query.indexOf('\n', i);
+      cleaned += ' ';
+      i = nl < 0 ? query.length : nl;
+      continue;
+    }
+    cleaned += query[i];
+    i++;
+  }
+  return { cleaned, unterminated: false };
 }
 
 /** Throw unless `query` declares only read operations. workday-mcp is
  *  read-only, and a GraphQL passthrough is the one place a caller could
  *  otherwise hand Workday a write. */
 export function assertReadOnlyGraphql(query: string): void {
-  const cleaned = stripGraphqlNoise(query);
+  const { cleaned, unterminated } = lexGraphql(query);
+  // A document that does not lex cannot be judged. Workday's own parser would
+  // reject it as a syntax error, but refusing here keeps the guard fail-closed
+  // rather than outsourcing the decision — an unterminated `"""` is exactly the
+  // shape that makes a scanner disagree with a real lexer about where a
+  // `mutation` lives.
+  if (unterminated) {
+    throw new Error(
+      'workday-mcp could not verify this GraphQL document is read-only: it contains an ' +
+        'unterminated string literal. Fix the quoting and retry.'
+    );
+  }
   // `\b` after the keyword is what stops a FIELD named `mutationLog` from
   // reading as an operation; the lookahead requires a name, `(` or `{` next,
   // which is the only thing that can legally follow an operation keyword.

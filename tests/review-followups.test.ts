@@ -193,3 +193,106 @@ describe('workday_get_task expand semantics (review: maxCards alone was ignored)
     expect(transport.calls.map((c) => c.path)).toContain('/acme/card/all/c1/tok.htmld');
   });
 });
+
+// ── Round 2: important — guard evasion via `"""` inside a `#` comment ───────
+describe('read-only guard, round 2 (review: ordering hole merely moved)', () => {
+  // Stripping strings BEFORE comments let a `"""` opened inside a comment run
+  // to a `"""` in a LATER comment, blanking the `mutation` between them — while
+  // a real GraphQL lexer sees two comments and a live write operation.
+  it('refuses a mutation fenced by `"""` sequences that live inside comments', () => {
+    expect(() =>
+      assertReadOnlyGraphql('# """\nmutation Evil { deleteEverything }\n# """')
+    ).toThrow(/read-only/i);
+  });
+
+  it('refuses a mutation between a commented `"""` and a real block string', () => {
+    expect(() =>
+      assertReadOnlyGraphql('# """\nmutation Evil { x }\nquery Q { f(a: """ok""") }')
+    ).toThrow(/read-only/i);
+  });
+
+  it('refuses a mutation after a single quote opened inside a comment', () => {
+    expect(() =>
+      assertReadOnlyGraphql('# "\nmutation Evil { x }\nquery Q { f(a: "s") }')
+    ).toThrow(/read-only/i);
+  });
+
+  it('fails CLOSED on an unterminated string rather than blanking the rest', () => {
+    expect(() => assertReadOnlyGraphql('query Q { f(a: ") } mutation Evil { x }')).toThrow(
+      /read-only/i
+    );
+  });
+
+  it('still allows legitimate documents that mix comments, strings and hashes', () => {
+    expect(() =>
+      assertReadOnlyGraphql('# a comment about mutation\nquery Q { f(a: "#tag", b: """m""") }')
+    ).not.toThrow();
+    expect(() => assertReadOnlyGraphql('query Q { mutationLog { id } }')).not.toThrow();
+    expect(() => assertReadOnlyGraphql('{ f }')).not.toThrow();
+  });
+});
+
+// ── Round 2: nit — nested grid column scoping ──────────────────────────────
+describe('redactTree nested grids (review: inherited column ids leaked across grids)', () => {
+  it('lets an inner grid with its own columns shadow an outer grid PII column id', () => {
+    const outer = {
+      widget: 'grid',
+      columns: [{ widget: 'column', columnId: '1.1', label: 'Social Security Number' }],
+      rows: [
+        { widget: 'row', cellsMap: { '1.1': { widget: 'text', value: '123-45-6789' } } },
+      ],
+      nested: {
+        widget: 'grid',
+        // SAME column id, but here it is an innocuous column
+        columns: [{ widget: 'column', columnId: '1.1', label: 'Worker' }],
+        rows: [{ widget: 'row', cellsMap: { '1.1': { widget: 'text', value: 'Sam Report' } } }],
+      },
+    };
+    const out = JSON.stringify(redactTree(outer));
+    expect(out).not.toContain('123-45-6789'); // outer PII column still redacted
+    expect(out).toContain('Sam Report'); // inner grid must NOT inherit the outer scope
+  });
+});
+
+// ── Round 2: fail closed on documents that cannot be lexed ─────────────────
+describe('read-only guard, malformed documents (found by differential fuzzing)', () => {
+  // An unterminated `"""` makes any scanner disagree with a real lexer about
+  // where a `mutation` lives. Workday would reject the document as a syntax
+  // error anyway, but the guard must not depend on that.
+  it('refuses a document with an unterminated block string', () => {
+    expect(() => assertReadOnlyGraphql('""" # mutation Evil { x }\n) )')).toThrow(
+      /unterminated string/i
+    );
+  });
+
+  it('refuses a document with an unterminated quoted string', () => {
+    expect(() => assertReadOnlyGraphql('query Q { f(a: "oops) }')).toThrow(/unterminated string/i);
+  });
+
+  it('still accepts well-formed strings, escapes and block strings', () => {
+    expect(() => assertReadOnlyGraphql('query Q { f(a: "a\\"b", c: """x""") }')).not.toThrow();
+  });
+});
+
+describe('read-only guard — cases found by differential fuzzing vs graphql@17', () => {
+  // Under a regex alternation the leading `"""` re-paired as `""` + `" # "`,
+  // leaving no stray quote, so the malformed document looked clean and the
+  // `mutation` was swallowed by what then read as a comment.
+  it('refuses an unterminated `"""` whose quotes re-pair under a naive reading', () => {
+    expect(() =>
+      assertReadOnlyGraphql('""" # "\n# mutation Evil { x } )\n"s"  \n# "')
+    ).toThrow(/unterminated string/i);
+  });
+
+  it('refuses a mutation hidden between block-string fences opened in comments', () => {
+    expect(() =>
+      assertReadOnlyGraphql('# """\nmutation Evil { x }\n# """\nquery Q { f }')
+    ).toThrow(/read-only/i);
+  });
+
+  it('allows a block string that merely CONTAINS the word mutation', () => {
+    expect(() =>
+      assertReadOnlyGraphql('query Q { f(a: """mutation Evil { x }""") }')
+    ).not.toThrow();
+  });
+});

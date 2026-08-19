@@ -75,18 +75,18 @@ function isSensitiveLabel(label: unknown): boolean {
   return typeof label === 'string' && SENSITIVE_VALUE_LABELS.some((re) => re.test(label));
 }
 
-/**
- * Deep-copy `node`, replacing every secret-keyed value — and every `value`
- * sitting next to a PII `label` — with {@link REDACTED}. Primitives pass
- * through untouched; cycles and runaway nesting are cut off at `maxDepth`.
- */
 /** Column ids of a `grid` whose COLUMN LABEL names PII.
  *
  *  A grid splits the label from the datum: the label lives in
  *  `columns[].label` and the value in `rows[].cellsMap[columnId]`, with no
- *  `label` anywhere near the cell. So the sibling-label rule below cannot see
- *  it, and an SSN or bank-account COLUMN would otherwise pass through
- *  `workday_fetch` untouched. */
+ *  `label` anywhere near the cell. So the sibling-label rule cannot see it, and
+ *  an SSN or bank-account COLUMN would otherwise pass through `workday_fetch`
+ *  untouched.
+ *
+ *  Returns `undefined` when this is not a grid, and a possibly EMPTY set when
+ *  it is. That distinction matters: a `columns` array opens a new scope, so a
+ *  nested grid with no PII columns must SHADOW an enclosing grid's ids rather
+ *  than inherit them — column ids like `1.1` collide freely between grids. */
 function sensitiveColumnIds(columns: unknown): Set<string> | undefined {
   if (!Array.isArray(columns)) return undefined;
   const ids = new Set<string>();
@@ -96,9 +96,15 @@ function sensitiveColumnIds(columns: unknown): Set<string> | undefined {
     const id = typeof c.columnId === 'string' ? c.columnId : undefined;
     if (id && isSensitiveLabel(c.label)) ids.add(id);
   }
-  return ids.size ? ids : undefined;
+  return ids;
 }
 
+/**
+ * Deep-copy `node`, replacing every secret-keyed value — every `value` sitting
+ * next to a PII `label`, and every grid cell under a PII COLUMN — with
+ * {@link REDACTED}. Primitives pass through untouched; cycles and runaway
+ * nesting are cut off at `maxDepth`.
+ */
 export function redactTree(node: unknown, opts: RedactOptions = {}): unknown {
   const maxDepth = opts.maxDepth ?? DEFAULT_MAX_DEPTH;
   const walk = (
@@ -117,7 +123,9 @@ export function redactTree(node: unknown, opts: RedactOptions = {}): unknown {
     // `value` (and `secondaryValue`) — the widget shape that key-matching alone
     // would sail straight past.
     const piiSiblings = isSensitiveLabel(src.label);
-    // Entering a grid: derive its PII columns and carry them down to the rows.
+    // Entering a grid: its own `columns` array defines the scope for the rows
+    // beneath it — even when it names no PII columns, so an inner grid never
+    // inherits an outer grid's colliding ids.
     const columns = sensitiveColumnIds(src.columns) ?? piiColumns;
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(src)) {
