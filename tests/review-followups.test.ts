@@ -296,3 +296,51 @@ describe('read-only guard — cases found by differential fuzzing vs graphql@17'
     ).not.toThrow();
   });
 });
+
+// ── Round 3 ────────────────────────────────────────────────────────────────
+describe('read-only guard, round 3 (review: commas are IGNORED tokens in GraphQL)', () => {
+  // A comma is whitespace as far as GraphQL is concerned, so it may legally sit
+  // between two top-level definitions — but the keyword scan only accepted
+  // whitespace, `)` or `}` before the keyword.
+  it('refuses a comma-separated mutation definition', () => {
+    expect(() =>
+      assertReadOnlyGraphql('query Q { f },mutation Evil { deleteEverything }')
+    ).toThrow(/read-only/i);
+  });
+
+  it('refuses a comma-separated subscription, and one behind several commas', () => {
+    expect(() => assertReadOnlyGraphql('query Q { f },subscription S { y }')).toThrow(
+      /read-only/i
+    );
+    expect(() => assertReadOnlyGraphql('query Q { f },,,mutation Evil { x }')).toThrow(
+      /read-only/i
+    );
+  });
+
+  it('still does not fire on identifiers that merely end in the keyword', () => {
+    expect(() => assertReadOnlyGraphql('query Q { mutationLog { id } }')).not.toThrow();
+    expect(() => assertReadOnlyGraphql('query Q { myMutation { id } }')).not.toThrow();
+    expect(() => assertReadOnlyGraphql('query Q($mutation: String) { f(a: $mutation) }')).not.toThrow();
+  });
+});
+
+describe('lexGraphql block-string escapes (review: false positive on \\""")', () => {
+  // An ODD number of escaped triple-quotes is what exposes it: the lexer takes
+  // the escaped `"""` as the terminator, then re-opens on the real one and runs
+  // off the end, rejecting a perfectly valid read query.
+  it('accepts a read query whose block string contains an escaped triple quote', () => {
+    expect(() => assertReadOnlyGraphql('query Q { f(a: """a \\"""b""") }')).not.toThrow();
+  });
+
+  it('still refuses a mutation that follows such a block string', () => {
+    expect(() =>
+      assertReadOnlyGraphql('query Q { f(a: """a \\"""b""") } mutation Evil { y }')
+    ).toThrow(/read-only/i);
+  });
+
+  it('still reports a genuinely unterminated block string', () => {
+    expect(() => assertReadOnlyGraphql('query Q { f(a: """never closed) }')).toThrow(
+      /unterminated string/i
+    );
+  });
+});

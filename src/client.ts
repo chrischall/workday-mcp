@@ -123,10 +123,25 @@ function lexGraphql(query: string): GraphqlLex {
   let i = 0;
   while (i < query.length) {
     if (query.startsWith('"""', i)) {
-      const end = query.indexOf('"""', i + 3);
-      if (end < 0) return { cleaned, unterminated: true };
+      // `\"""` is GraphQL's block-string escape, NOT a terminator. Taking it as
+      // one makes the lexer re-open on the real terminator and run off the end,
+      // rejecting a valid read query as unterminated.
+      let j = i + 3;
+      let closed = false;
+      while (j < query.length) {
+        if (query.startsWith('\\"""', j)) {
+          j += 4;
+          continue;
+        }
+        if (query.startsWith('"""', j)) {
+          closed = true;
+          break;
+        }
+        j++;
+      }
+      if (!closed) return { cleaned, unterminated: true };
       cleaned += ' ';
-      i = end + 3;
+      i = j + 3;
       continue;
     }
     if (query[i] === '"') {
@@ -177,10 +192,16 @@ export function assertReadOnlyGraphql(query: string): void {
         'unterminated string literal. Fix the quoting and retry.'
     );
   }
+  // The leading class must admit EVERY character that can legally precede an
+  // operation keyword. Listing whitespace, `)` and `}` missed the comma — an
+  // IGNORED token in GraphQL, so `query Q { f },mutation Evil { … }` is two
+  // valid definitions and sailed straight through. Inverting the test to "not
+  // an identifier character" covers commas, BOMs and anything else, while still
+  // refusing to fire inside `mutationLog`, `myMutation` or `$mutation`.
   // `\b` after the keyword is what stops a FIELD named `mutationLog` from
   // reading as an operation; the lookahead requires a name, `(` or `{` next,
   // which is the only thing that can legally follow an operation keyword.
-  const writeOp = /(^|[\s})])(mutation|subscription)\b\s*(?=[\w({])/i.exec(cleaned);
+  const writeOp = /(^|[^\w$])(mutation|subscription)\b\s*(?=[\w({])/i.exec(cleaned);
   if (writeOp) {
     throw new Error(
       `workday-mcp is read-only: the GraphQL document declares a \`${writeOp[2].toLowerCase()}\` ` +
