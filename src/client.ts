@@ -176,6 +176,99 @@ function lexGraphql(query: string): GraphqlLex {
   return { cleaned, unterminated: false };
 }
 
+/** GraphQL's Ignored tokens — whitespace, line terminators, COMMAS and the BOM.
+ *  A comma carries no meaning, so it may appear anywhere whitespace may. */
+function isIgnoredChar(ch: string): boolean {
+  return (
+    ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === ',' || ch === '\uFEFF'
+  );
+}
+
+function isNameStart(ch: string): boolean {
+  return /[A-Za-z_]/.test(ch);
+}
+
+function isNameChar(ch: string): boolean {
+  return /[A-Za-z0-9_]/.test(ch);
+}
+
+/**
+ * Find a write operation by TOKEN POSITION rather than by pattern.
+ *
+ * Every regex attempt at this failed for the same reason: it enumerated the
+ * characters allowed around the keyword, and an enumeration can always be
+ * under-specified. Commas got through on the leading side, then again on the
+ * trailing side. Meanwhile the pattern ALSO over-fired, rejecting the read
+ * query `{ mutation { id } }` where `mutation` is simply a field name.
+ *
+ * Both faults are the same mistake — position is what matters, not spelling.
+ * An operation definition can only begin at brace depth 0, and a field can only
+ * appear at depth >= 1, so tracking depth settles both questions exactly.
+ * Parens are tracked too, so a `}` closing an object default inside variable
+ * definitions is not mistaken for the end of a definition.
+ *
+ * Returns the offending keyword, or null when the document is read-only.
+ */
+function findWriteOperation(cleaned: string): string | null {
+  let i = 0;
+  let braceDepth = 0;
+  let parenDepth = 0;
+  // True when the next Name token would be the first token of a definition —
+  // the only position an operation keyword can occupy.
+  let atDefinitionStart = true;
+  while (i < cleaned.length) {
+    const ch = cleaned[i];
+    if (isIgnoredChar(ch)) {
+      i++;
+      continue;
+    }
+    if (ch === '(' || ch === '[') {
+      parenDepth++;
+      atDefinitionStart = false;
+      i++;
+      continue;
+    }
+    if (ch === ')' || ch === ']') {
+      parenDepth = Math.max(0, parenDepth - 1);
+      atDefinitionStart = false;
+      i++;
+      continue;
+    }
+    if (ch === '{') {
+      braceDepth++;
+      atDefinitionStart = false;
+      i++;
+      continue;
+    }
+    if (ch === '}') {
+      braceDepth = Math.max(0, braceDepth - 1);
+      // Only a brace closing at top level ends a definition; one inside
+      // variable definitions is closing an object default value.
+      if (braceDepth === 0 && parenDepth === 0) atDefinitionStart = true;
+      i++;
+      continue;
+    }
+    if (isNameStart(ch)) {
+      let j = i;
+      while (j < cleaned.length && isNameChar(cleaned[j])) j++;
+      if (braceDepth === 0 && parenDepth === 0 && atDefinitionStart) {
+        // Compared case-insensitively: GraphQL keywords are lowercase, so a
+        // capitalised variant cannot parse anyway, and refusing it is the safe
+        // direction. Only the FIRST token of a definition is tested, so
+        // `type Mutation`, `fragment Mutation` and `query mutation` are fine.
+        const keyword = cleaned.slice(i, j).toLowerCase();
+        if (keyword === 'mutation' || keyword === 'subscription') return keyword;
+        atDefinitionStart = false;
+      }
+      i = j;
+      continue;
+    }
+    if (braceDepth === 0 && parenDepth === 0) atDefinitionStart = false;
+    i++;
+  }
+  return null;
+}
+
 /** Throw unless `query` declares only read operations. workday-mcp is
  *  read-only, and a GraphQL passthrough is the one place a caller could
  *  otherwise hand Workday a write. */
@@ -192,19 +285,10 @@ export function assertReadOnlyGraphql(query: string): void {
         'unterminated string literal. Fix the quoting and retry.'
     );
   }
-  // The leading class must admit EVERY character that can legally precede an
-  // operation keyword. Listing whitespace, `)` and `}` missed the comma — an
-  // IGNORED token in GraphQL, so `query Q { f },mutation Evil { … }` is two
-  // valid definitions and sailed straight through. Inverting the test to "not
-  // an identifier character" covers commas, BOMs and anything else, while still
-  // refusing to fire inside `mutationLog`, `myMutation` or `$mutation`.
-  // `\b` after the keyword is what stops a FIELD named `mutationLog` from
-  // reading as an operation; the lookahead requires a name, `(` or `{` next,
-  // which is the only thing that can legally follow an operation keyword.
-  const writeOp = /(^|[^\w$])(mutation|subscription)\b\s*(?=[\w({])/i.exec(cleaned);
+  const writeOp = findWriteOperation(cleaned);
   if (writeOp) {
     throw new Error(
-      `workday-mcp is read-only: the GraphQL document declares a \`${writeOp[2].toLowerCase()}\` ` +
+      `workday-mcp is read-only: the GraphQL document declares a \`${writeOp}\` ` +
         'operation. Only `query` operations are allowed.'
     );
   }

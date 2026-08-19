@@ -344,3 +344,46 @@ describe('lexGraphql block-string escapes (review: false positive on \\""")', ()
     );
   });
 });
+
+// ── Round 4: stop pattern-matching, check TOKEN POSITION ───────────────────
+describe('read-only guard, round 4 (review: trailing lookahead was also a whitelist)', () => {
+  it('refuses a mutation whose name is separated by a comma', () => {
+    expect(() =>
+      assertReadOnlyGraphql('query Q { f } mutation,Evil { deleteEverything }')
+    ).toThrow(/read-only/i);
+  });
+
+  it('refuses commas on BOTH sides of the keyword, and a bare one', () => {
+    expect(() => assertReadOnlyGraphql('query Q { f },mutation,Evil { x }')).toThrow(/read-only/i);
+    expect(() => assertReadOnlyGraphql('mutation,Evil{x}')).toThrow(/read-only/i);
+    expect(() => assertReadOnlyGraphql('mutation\t,\n Evil { x }')).toThrow(/read-only/i);
+    expect(() => assertReadOnlyGraphql('query Q { f } subscription,S { y }')).toThrow(
+      /read-only/i
+    );
+  });
+
+  // The nit: fields live at brace depth >= 1, where no operation can begin.
+  it('ALLOWS a read query with a field legally named mutation or subscription', () => {
+    expect(() => assertReadOnlyGraphql('query Q { mutation { id } }')).not.toThrow();
+    expect(() => assertReadOnlyGraphql('query Q { subscription(first: 1) { id } }')).not.toThrow();
+    expect(() => assertReadOnlyGraphql('{ mutation { id } }')).not.toThrow();
+  });
+
+  it('ALLOWS an operation or type merely NAMED mutation', () => {
+    expect(() => assertReadOnlyGraphql('query mutation { f }')).not.toThrow();
+    expect(() => assertReadOnlyGraphql('type Mutation { f: String }')).not.toThrow();
+    expect(() => assertReadOnlyGraphql('fragment Mutation on T { a }')).not.toThrow();
+  });
+
+  it('still refuses every genuine write, including after a fragment', () => {
+    expect(() => assertReadOnlyGraphql('mutation Evil { x }')).toThrow(/read-only/i);
+    expect(() => assertReadOnlyGraphql('mutation{x}')).toThrow(/read-only/i);
+    expect(() => assertReadOnlyGraphql('subscription S { y }')).toThrow(/read-only/i);
+    expect(() => assertReadOnlyGraphql('fragment F on T { a } mutation M { x }')).toThrow(
+      /read-only/i
+    );
+    expect(() => assertReadOnlyGraphql('query Q($a: Int = 1) { f } mutation M { x }')).toThrow(
+      /read-only/i
+    );
+  });
+});
