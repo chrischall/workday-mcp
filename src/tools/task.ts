@@ -57,18 +57,29 @@ export function registerTaskTools(server: McpServer, client: WorkdayClient): voi
           .min(0)
           .max(3)
           .optional()
-          .describe('Levels to follow when `expand` is set (default 1).'),
+          .describe(
+            'Levels to follow (default 1). Supplying this implies `expand` unless ' +
+              '`expand: false` is passed explicitly.'
+          ),
         maxCards: z
           .number()
           .int()
           .min(1)
           .max(40)
           .optional()
-          .describe('Cap on child cards fetched when expanding (default 12).'),
+          .describe(
+            'Cap on child cards fetched (default 12). Supplying this implies `expand` ' +
+              'unless `expand: false` is passed explicitly.'
+          ),
       },
     },
     async ({ path, expand, depth, maxCards }) => {
-      if (!expand && depth === undefined) {
+      // An explicit `expand` always wins — including `expand: false`, which
+      // must NOT crawl however the other knobs are set. Otherwise, supplying
+      // either crawl knob is taken as asking to expand, so `maxCards` alone is
+      // no longer silently ignored.
+      const shouldCrawl = expand ?? (depth !== undefined || maxCards !== undefined);
+      if (!shouldCrawl) {
         const task = await client.getTask(path);
         return textResult(task);
       }

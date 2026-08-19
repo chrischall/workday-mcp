@@ -92,13 +92,20 @@ export function stripJsonGuard(body: string): string {
   return start > 0 ? body.slice(start) : body;
 }
 
-/** Remove comments and string literals so an operation-keyword scan cannot be
- *  fooled by the word `mutation` appearing inside either. */
+/** Remove string literals and comments so an operation-keyword scan cannot be
+ *  fooled by the word `mutation` appearing inside either.
+ *
+ *  ORDER IS LOAD-BEARING. Stripping comments first lets a `#` *inside a string*
+ *  blank the rest of the line — so `query Q { f(a: "#") } mutation Evil { … }`
+ *  would have had its `mutation` erased before the scan ever saw it, while the
+ *  ORIGINAL document (still the thing POSTed) executes the write. Strings are
+ *  therefore consumed first — block strings, then quoted ones — and only what
+ *  survives can introduce a comment. */
 function stripGraphqlNoise(query: string): string {
   return query
-    .replace(/#[^\n]*/g, ' ')
     .replace(/"""[\s\S]*?"""/g, ' ')
-    .replace(/"(?:[^"\\]|\\.)*"/g, ' ');
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, ' ')
+    .replace(/#[^\n]*/g, ' ');
 }
 
 /** Throw unless `query` declares only read operations. workday-mcp is
@@ -116,6 +123,16 @@ export function assertReadOnlyGraphql(query: string): void {
         'operation. Only `query` operations are allowed.'
     );
   }
+}
+
+/** Match an app by label: case-insensitive substring, or a RegExp. Returns the
+ *  first match in menu order — Workday's own relevance ordering. */
+function matchApp(apps: WorkdayApp[], match: string | RegExp): WorkdayApp | null {
+  const test =
+    typeof match === 'string'
+      ? (label: string) => label.toLowerCase().includes(match.toLowerCase())
+      : (label: string) => match.test(label);
+  return apps.find((a) => test(a.label)) ?? null;
 }
 
 export class WorkdayClient {
@@ -332,12 +349,7 @@ export class WorkdayClient {
    * would be meaningless on anyone else's.
    */
   async resolveApp(match: string | RegExp): Promise<WorkdayApp | null> {
-    const apps = await this.getApps();
-    const test =
-      typeof match === 'string'
-        ? (label: string) => label.toLowerCase().includes(match.toLowerCase())
-        : (label: string) => match.test(label);
-    return apps.find((a) => test(a.label)) ?? null;
+    return matchApp(await this.getApps(), match);
   }
 
   /**
@@ -346,9 +358,12 @@ export class WorkdayClient {
    * exist when nothing matches, so a mismatch is self-diagnosing.
    */
   async openApp(match: string | RegExp, opts: CrawlOptions = {}): Promise<WorkdayCrawlResult> {
-    const app = await this.resolveApp(match);
+    // Fetch the menu ONCE and match against it — the error path needs the very
+    // same list to name the alternatives.
+    const apps = await this.getApps();
+    const app = matchApp(apps, match);
     if (!app || !app.taskId) {
-      const available = (await this.getApps()).map((a) => a.label);
+      const available = apps.map((a) => a.label);
       throw new Error(
         `No Workday app matching ${match instanceof RegExp ? match.source : `"${match}"`}` +
           `${app && !app.taskId ? ' has a launchable task id' : ' is on your home screen'}. ` +
@@ -537,6 +552,10 @@ export class WorkdayClient {
    * docs/WORKDAY-API.md). Operations are not published, so the caller supplies
    * the document.
    *
+   * The response is passed through {@link redactTree} before it is returned —
+   * it is Workday's own payload, so it gets the same denylist as
+   * `fetchRawJson`.
+   *
    * READ-ONLY GUARD: the document is rejected if it declares a `mutation` or
    * `subscription` operation. The check runs on the document with comments and
    * string literals stripped, so neither a field named `mutationLog` nor the
@@ -551,11 +570,15 @@ export class WorkdayClient {
     assertReadOnlyGraphql(query);
     const op = operationName ? `?operation=${encodeURIComponent(operationName)}` : '';
     await this.primeSessionToken();
-    return this.postJson(`/wday/pex/graphql/graphql${op}`, {
+    const response = await this.postJson(`/wday/pex/graphql/graphql${op}`, {
       query,
       variables,
       ...(operationName ? { operationName } : {}),
     });
+    // Same contract as `fetchRawJson`: this hands back Workday's own payload,
+    // so it gets the denylist. Returning it raw would have contradicted what
+    // src/redact.ts, src/tools/raw.ts and CLAUDE.md all promise.
+    return redactTree(response);
   }
 
   /** Ensure a session token has been captured before a POST that needs one.

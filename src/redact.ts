@@ -14,6 +14,10 @@
 //      `label`. A manager reading a direct report's profile can pull an SSN
 //      or a bank account this way, so a value whose sibling label names
 //      government/financial PII is redacted too.
+//   3. COLUMN-based — a `grid` separates the two even further: the label sits
+//      in `columns[].label` and the datum in `rows[].cellsMap[columnId]`, so
+//      rule 2 cannot see it. PII columns are resolved to their ids and their
+//      cells redacted wholesale.
 
 /** Value replacing anything redacted. Deliberately not the empty string, so
  *  a reader can tell "withheld" from "Workday returned nothing". */
@@ -76,27 +80,62 @@ function isSensitiveLabel(label: unknown): boolean {
  * sitting next to a PII `label` — with {@link REDACTED}. Primitives pass
  * through untouched; cycles and runaway nesting are cut off at `maxDepth`.
  */
+/** Column ids of a `grid` whose COLUMN LABEL names PII.
+ *
+ *  A grid splits the label from the datum: the label lives in
+ *  `columns[].label` and the value in `rows[].cellsMap[columnId]`, with no
+ *  `label` anywhere near the cell. So the sibling-label rule below cannot see
+ *  it, and an SSN or bank-account COLUMN would otherwise pass through
+ *  `workday_fetch` untouched. */
+function sensitiveColumnIds(columns: unknown): Set<string> | undefined {
+  if (!Array.isArray(columns)) return undefined;
+  const ids = new Set<string>();
+  for (const col of columns) {
+    if (col === null || typeof col !== 'object' || Array.isArray(col)) continue;
+    const c = col as Record<string, unknown>;
+    const id = typeof c.columnId === 'string' ? c.columnId : undefined;
+    if (id && isSensitiveLabel(c.label)) ids.add(id);
+  }
+  return ids.size ? ids : undefined;
+}
+
 export function redactTree(node: unknown, opts: RedactOptions = {}): unknown {
   const maxDepth = opts.maxDepth ?? DEFAULT_MAX_DEPTH;
-  const walk = (n: unknown, depth: number, seen: Set<object>): unknown => {
+  const walk = (
+    n: unknown,
+    depth: number,
+    seen: Set<object>,
+    piiColumns?: Set<string>
+  ): unknown => {
     if (n === null || typeof n !== 'object') return n;
     if (depth >= maxDepth) return '[truncated: max depth]';
     if (seen.has(n as object)) return '[truncated: cycle]';
     const nextSeen = new Set(seen).add(n as object);
-    if (Array.isArray(n)) return n.map((item) => walk(item, depth + 1, nextSeen));
+    if (Array.isArray(n)) return n.map((item) => walk(item, depth + 1, nextSeen, piiColumns));
     const src = n as Record<string, unknown>;
     // A sibling `label` naming government/financial PII poisons this object's
     // `value` (and `secondaryValue`) — the widget shape that key-matching alone
     // would sail straight past.
     const piiSiblings = isSensitiveLabel(src.label);
+    // Entering a grid: derive its PII columns and carry them down to the rows.
+    const columns = sensitiveColumnIds(src.columns) ?? piiColumns;
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(src)) {
       if (isSecretKey(k)) {
         out[k] = REDACTED;
       } else if (piiSiblings && (k === 'value' || k === 'secondaryValue')) {
         out[k] = REDACTED;
+      } else if (k === 'cellsMap' && columns && v !== null && typeof v === 'object') {
+        const cells = v as Record<string, unknown>;
+        const cleaned: Record<string, unknown> = {};
+        for (const [colId, cell] of Object.entries(cells)) {
+          cleaned[colId] = columns.has(colId)
+            ? REDACTED
+            : walk(cell, depth + 1, nextSeen, columns);
+        }
+        out[k] = cleaned;
       } else {
-        out[k] = walk(v, depth + 1, nextSeen);
+        out[k] = walk(v, depth + 1, nextSeen, columns);
       }
     }
     return out;
