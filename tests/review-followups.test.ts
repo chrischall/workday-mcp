@@ -369,10 +369,11 @@ describe('read-only guard, round 4 (review: trailing lookahead was also a whitel
     expect(() => assertReadOnlyGraphql('{ mutation { id } }')).not.toThrow();
   });
 
-  it('ALLOWS an operation or type merely NAMED mutation', () => {
+  it('ALLOWS an operation or fragment merely NAMED mutation', () => {
     expect(() => assertReadOnlyGraphql('query mutation { f }')).not.toThrow();
-    expect(() => assertReadOnlyGraphql('type Mutation { f: String }')).not.toThrow();
     expect(() => assertReadOnlyGraphql('fragment Mutation on T { a }')).not.toThrow();
+    // NB: `type Mutation { … }` was allowed until SDL documents were refused
+    // wholesale — see the SDL suite below for why that changed.
   });
 
   it('still refuses every genuine write, including after a fragment', () => {
@@ -385,5 +386,42 @@ describe('read-only guard, round 4 (review: trailing lookahead was also a whitel
     expect(() => assertReadOnlyGraphql('query Q($a: Int = 1) { f } mutation M { x }')).toThrow(
       /read-only/i
     );
+  });
+});
+
+// ── Round 4 nit: SDL definitions have no top-level `}` boundary ────────────
+describe('read-only guard, SDL definitions (review: boundary rule assumed a `}`)', () => {
+  // `scalar`, `union`, `directive` and `extend` definitions can end WITHOUT a
+  // top-level `}`, so the definition tracker never re-armed and a following
+  // `mutation` went unseen. Confirmed against graphql@17: all five parse as
+  // genuine write documents.
+  it('refuses a mutation hidden after a braceless SDL definition', () => {
+    for (const doc of [
+      'scalar Foo mutation Evil { deleteEverything }',
+      'union U = A | B mutation Evil { x }',
+      'directive @d on FIELD mutation Evil { x }',
+      'extend type T @dir mutation Evil { x }',
+      'scalar Foo subscription S { y }',
+    ]) {
+      expect(() => assertReadOnlyGraphql(doc)).toThrow(/read-only|could not verify/i);
+    }
+  });
+
+  // Workday executes queries, not schema definitions, so refusing a document
+  // whose boundaries cannot be tracked costs nothing real and keeps the guard
+  // fail-closed rather than guessing.
+  it('refuses a type-system document outright as unverifiable', () => {
+    expect(() => assertReadOnlyGraphql('type Mutation { f: String }')).toThrow(
+      /type-system|could not verify/i
+    );
+    expect(() => assertReadOnlyGraphql('scalar Foo')).toThrow(/type-system|could not verify/i);
+  });
+
+  it('still allows ordinary executable documents', () => {
+    expect(() => assertReadOnlyGraphql('query Q { f }')).not.toThrow();
+    expect(() => assertReadOnlyGraphql('{ f }')).not.toThrow();
+    expect(() => assertReadOnlyGraphql('fragment F on T { a } query Q { ...F }')).not.toThrow();
+    expect(() => assertReadOnlyGraphql('query mutation { f }')).not.toThrow();
+    expect(() => assertReadOnlyGraphql('query Q { mutation { id } }')).not.toThrow();
   });
 });
