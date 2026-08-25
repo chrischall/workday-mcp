@@ -1,0 +1,39 @@
+version: 1
+name: Workday
+slug: workday
+summary: >-
+  Read-only Workday access for Claude — fetch your tasks, pay, benefits and
+  compensation data through your signed-in session
+#
+# Hosting note (a comment, not user-facing summary text): this is a
+# BROWSER-BRIDGE MCP — it reaches its site through the user's signed-in
+# tab via the fetchproxy bridge. A bridged registration also needs runtime
+# `fly-shared`, `bridge: true` and a `bridgePortEnv`, which are registration
+# fields this manifest has no schema for (set them over the control API).
+# `state.dataDir` below is required for `bridge`.
+env:
+  - name: WORKDAY_TENANT
+    required: true
+    help: >-
+      Workday tenant slug, e.g. `acme` for https://wd5.myworkday.com/acme.
+  - name: WORKDAY_HOST
+    required: false
+    help: >-
+      Workday data-center host (default wd5.myworkday.com).
+  - name: WORKDAY_WS_PORT
+    required: false
+    help: >-
+      Override the fetchproxy WebSocket port (default 37149).
+state:
+  dataDir: true
+  reason: >-
+    The fetchproxy identity lives at $HOME/.fetchproxy/identity/<name>.json
+    and the pair code derives from it. Without a persistent $HOME every cold
+    start mints a fresh identity and re-prompts pairing in the browser; the
+    API refuses bridge without it.
+# egress: intentionally NOT declared.
+#
+# This server's upstream host is per-deployment, so no fixed allowlist can
+# be correct here. On the isolated tier, allow:
+#   your Workday tenant host, from WORKDAY_HOST / WORKDAY_TENANT (e.g. <tenant>.myworkday.com)
+# Everything else in this file applies regardless of which host that is.
