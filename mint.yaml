@@ -31,9 +31,21 @@ state:
     and the pair code derives from it. Without a persistent $HOME every cold
     start mints a fresh identity and re-prompts pairing in the browser; the
     API refuses bridge without it.
-# egress: intentionally NOT declared.
-#
-# This server's upstream host is per-deployment, so no fixed allowlist can
-# be correct here. On the isolated tier, allow:
-#   your Workday tenant host, from WORKDAY_HOST / WORKDAY_TENANT (e.g. <tenant>.myworkday.com)
-# Everything else in this file applies regardless of which host that is.
+egress:
+  # Only hosts the SERVER process actually fetches. Hosts that appear
+  # solely in a URL this server BUILDS and returns are excluded.
+  #
+  # Empty on purpose: this is a pure browser-bridge MCP. Every Workday
+  # request (the tenant's *.htmld pages and JSON under
+  # https://<WORKDAY_HOST>/<WORKDAY_TENANT>/…, default wd5.myworkday.com)
+  # is made by the user's signed-in tab via the fetchproxy extension, never
+  # by this process (src/transport-fetchproxy.ts is the only transport;
+  # there is no direct mode and no bootstrap that dials). WORKDAY_HOST only
+  # selects WHICH signed-in tab the extension routes to — it is not a host
+  # this process connects to, so it does not belong here on any tier. The
+  # only socket the process opens is the loopback concentrator the
+  # extension connects TO. Under the per-child fence the child cannot
+  # resolve DNS at all, which is fine — it never needs to. The
+  # SSO/sign-in redirect hosts (Ping/Okta/Entra) are likewise followed by
+  # the browser, not by this process.
+  allow: []
