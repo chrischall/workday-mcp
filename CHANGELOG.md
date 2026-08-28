@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/chrischall/workday-mcp/compare/v0.4.0...v0.4.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **egress:** declare every host the server dials in mint.yaml ([#60](https://github.com/chrischall/workday-mcp/issues/60)) ([5e74aa0](https://github.com/chrischall/workday-mcp/commit/5e74aa0858f300b1eaf3f2b1d9ca17205fef287e))
+
 ## [0.4.0](https://github.com/chrischall/workday-mcp/compare/v0.3.2...v0.4.0) (2026-08-19)
 
 
