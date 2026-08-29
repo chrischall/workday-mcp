@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/chrischall/workday-mcp/compare/v0.4.1...v0.5.0) (2026-08-29)
+
+
+### Features
+
+* **deps:** take @fetchproxy/server 2.2.0 so the concentrator can bind its sandbox address ([#62](https://github.com/chrischall/workday-mcp/issues/62)) ([09bd97a](https://github.com/chrischall/workday-mcp/commit/09bd97ae8a17f0260c16bee09b9df1573c31d2e9))
+
 ## [0.4.1](https://github.com/chrischall/workday-mcp/compare/v0.4.0...v0.4.1) (2026-08-28)
 
 
