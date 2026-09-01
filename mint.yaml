@@ -24,6 +24,10 @@ env:
     required: false
     help: >-
       Override the fetchproxy WebSocket port (default 37149).
+  - name: WORKDAY_DEBUG
+    required: false
+    help: >-
+      Set to 1 to log verbose request detail to stderr.
 state:
   dataDir: true
   reason: >-
