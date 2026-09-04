@@ -1,7 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
-import { textResult } from '../mcp.js';
+import { minifiedResult } from '../mcp.js';
+import { viewArg, viewResponse } from '../view.js';
 
 /**
  * List the user's Workday apps (Personal Information, Benefits and Pay,
@@ -29,7 +30,7 @@ export function registerAppsTools(server: McpServer, client: WorkdayClient): voi
     },
     async () => {
       const apps = await client.getApps();
-      return textResult({ apps, count: apps.length });
+      return minifiedResult({ apps, count: apps.length });
     }
   );
 
@@ -51,6 +52,7 @@ export function registerAppsTools(server: McpServer, client: WorkdayClient): voi
         openWorldHint: true,
       },
       inputSchema: {
+        view: viewArg(),
         app: z
           .string()
           .min(1)
@@ -71,12 +73,12 @@ export function registerAppsTools(server: McpServer, client: WorkdayClient): voi
           .describe('Cap on child cards fetched (default 12). Each is a real browser fetch.'),
       },
     },
-    async ({ app, depth, maxCards }) => {
+    async ({ app, depth, maxCards, view }) => {
       const page = await client.openApp(app, {
         ...(depth !== undefined ? { depth } : {}),
         ...(maxCards !== undefined ? { maxCards } : {}),
       });
-      return textResult(page);
+      return viewResponse(view, page);
     }
   );
 }

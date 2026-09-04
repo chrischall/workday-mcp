@@ -1,7 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
-import { textResult } from '../mcp.js';
+import { minifiedResult } from '../mcp.js';
+import { viewArg, viewResponse } from '../view.js';
 
 /**
  * The read workhorse: fetch any Workday `*.htmld` data endpoint through the
@@ -36,6 +37,7 @@ export function registerTaskTools(server: McpServer, client: WorkdayClient): voi
         openWorldHint: true,
       },
       inputSchema: {
+        view: viewArg(),
         path: z
           .string()
           .min(1)
@@ -73,7 +75,7 @@ export function registerTaskTools(server: McpServer, client: WorkdayClient): voi
           ),
       },
     },
-    async ({ path, expand, depth, maxCards }) => {
+    async ({ path, expand, depth, maxCards, view }) => {
       // An explicit `expand` always wins — including `expand: false`, which
       // must NOT crawl however the other knobs are set. Otherwise, supplying
       // either crawl knob is taken as asking to expand, so `maxCards` alone is
@@ -81,13 +83,13 @@ export function registerTaskTools(server: McpServer, client: WorkdayClient): voi
       const shouldCrawl = expand ?? (depth !== undefined || maxCards !== undefined);
       if (!shouldCrawl) {
         const task = await client.getTask(path);
-        return textResult(task);
+        return viewResponse(view, task);
       }
       const page = await client.crawl(path, {
         ...(depth !== undefined ? { depth } : {}),
         ...(maxCards !== undefined ? { maxCards } : {}),
       });
-      return textResult(page);
+      return viewResponse(view, page);
     }
   );
 }

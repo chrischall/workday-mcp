@@ -1,7 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
-import { textResult } from '../mcp.js';
+import { minifiedResult } from '../mcp.js';
+import { viewArg, viewResponse } from '../view.js';
 
 /**
  * The people surface — what a manager reaches for.
@@ -29,7 +30,7 @@ export function registerPeopleTools(server: McpServer, client: WorkdayClient): v
     },
     async () => {
       const org = await client.getOrgChart();
-      return textResult({
+      return minifiedResult({
         workerId: org.workerId,
         managementChain: org.ancestors,
         atThisLevel: org.nodes,
@@ -72,7 +73,7 @@ export function registerPeopleTools(server: McpServer, client: WorkdayClient): v
     },
     async ({ worker }) => {
       const page = await client.getWorker(worker);
-      return textResult({
+      return minifiedResult({
         title: page.title,
         sections: page.profile?.sections ?? [],
         fields: page.sections,
@@ -97,6 +98,7 @@ export function registerPeopleTools(server: McpServer, client: WorkdayClient): v
         openWorldHint: true,
       },
       inputSchema: {
+        view: viewArg(),
         worker: z.string().min(1).describe('Profile uri or bare worker instance id.'),
         task: z
           .string()
@@ -104,9 +106,9 @@ export function registerPeopleTools(server: McpServer, client: WorkdayClient): v
           .describe('Task name as it appears on the profile, e.g. `Compensation`.'),
       },
     },
-    async ({ worker, task }) => {
+    async ({ worker, task, view }) => {
       const out = await client.getWorkerTask(worker, task);
-      return textResult(out);
+      return viewResponse(view, out);
     }
   );
 
@@ -127,7 +129,7 @@ export function registerPeopleTools(server: McpServer, client: WorkdayClient): v
     },
     async () => {
       const page = await client.getMyProfile();
-      return textResult({
+      return minifiedResult({
         title: page.title,
         sections: page.profile?.sections ?? [],
         fields: page.sections,
