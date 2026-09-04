@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
-import { textResult } from '../mcp.js';
+import { minifiedResult } from '../mcp.js';
 import { capPayload } from '../redact.js';
 
 /** Default cap on a raw payload. Workday envelopes routinely exceed 100 KB. */
@@ -50,7 +50,7 @@ export function registerRawTools(server: McpServer, client: WorkdayClient): void
     async ({ path, maxBytes }) => {
       const raw = await client.fetchRawJson(path);
       const capped = capPayload(raw, maxBytes ?? DEFAULT_MAX_BYTES);
-      return textResult(capped.data);
+      return minifiedResult(capped.data);
     }
   );
 
@@ -92,7 +92,7 @@ export function registerRawTools(server: McpServer, client: WorkdayClient): void
     async ({ query, variables, operationName, maxBytes }) => {
       const out = await client.graphql(query, variables ?? {}, operationName);
       const capped = capPayload(out, maxBytes ?? DEFAULT_MAX_BYTES);
-      return textResult(capped.data);
+      return minifiedResult(capped.data);
     }
   );
 }
