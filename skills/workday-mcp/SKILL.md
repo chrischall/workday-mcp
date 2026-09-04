@@ -110,6 +110,71 @@ reuses that live session — there is no separate login.
   hint distinguishing "bridge down" from "extension not connected" from
   "Workday session expired (re-sign-in)".
 
+## Response shape (`view`)
+
+Three of this server's ten tools take `view: "compact" | "full"` —
+**`workday_get_task`**, **`workday_open_app`** and
+**`workday_get_worker_task`** — and on all three **`compact` is the DEFAULT**.
+The slim rung is what you get without asking for it.
+
+Those three are the deep reads: the ones that follow a hub down to its child
+cards, or open one named item on a profile, and can therefore come back with a
+lot of page in them.
+
+**Compact here is media stripping, not a field projection.** `src/view.ts`
+writes no field list, and says why: this repo holds no captured Workday
+payload and no documented field list, so nothing in it could honestly claim
+which of Workday's fields matter. What it does instead is subtractive — remove
+keys whose value is a picture (`avatar`, `photo`, `icon`, `image`, `logo`,
+`banner`, and their `Url` / `Uri` / `Link` forms) plus bare image URLs — which
+cannot lose a field nobody knew about. **No field is named as kept**, because
+no tool here has a picture as its product.
+
+**Expect compact to remove very little, and know why.** The parser has already
+done most of this job: `DECORATIVE_COLUMNS` drops `uxIcon`, `image`, `icon`,
+`avatar`, `photo` and `indicatorIcon` from a grid row's cells AND from its
+references, before anything reaches `view` — deliberately, so a decorative
+column never reads as data. So on a `grid` page compact often has nothing left
+to take. Do not read a slim `card` or `grid` response as evidence that content
+was withheld; if a field is missing it is far more likely the page did not
+carry it.
+
+`view: "full"` returns the parsed page untouched. There is deliberately **no
+`raw` rung**: `full` already IS the structure this server parsed out of
+Workday's `.htmld` response, and for the genuinely unparsed article there is a
+tool — `workday_fetch`, below. A third `view` value would silently alias one
+that exists.
+
+### Why the other seven have none
+
+- **`workday_get_org_chart`** answers with an ASSEMBLED record —
+  `{workerId, managementChain, atThisLevel, note}` — built from the org-chart
+  page rather than handed through from it. There is no upstream payload to
+  slim, and the `note` explaining a chain-upward-only result is exactly the
+  kind of field a blind projection must not touch.
+- **`workday_get_worker` and `workday_get_my_profile`** answer with a
+  CATALOG: the sections of a profile and the ~40 named tasks that are
+  fetchable on it. A list of task names has no picture in it, and the names
+  are the whole product — you pass one straight back into
+  `workday_get_worker_task`, which is where the rung lives.
+- **`workday_get_apps`** answers with app names and their launchable task ids.
+  Same shape of answer, same reason.
+- **`workday_fetch`** is the escape hatch: it exists to hand back the RAW
+  `.htmld` response, secrets redacted, for a page the parser does not model
+  yet. Projecting the escape hatch would defeat the reason to reach for it —
+  you call it precisely to see fields the typed tools drop. Its size control
+  is `maxBytes`, which truncates honestly, not a rung that removes by
+  category.
+- **`workday_graphql`** is the other escape hatch, and you supply the document
+  — so you have already chosen the fields, and `maxBytes` bounds the result.
+- **`workday_healthcheck`** answers with a diagnostic verdict: which hop is
+  broken, and what to do about it. Nothing in it is decoration.
+
+Passing `view` to one of those is not an error and will not fail: the tool
+does not declare it, so zod drops the unknown key and the call runs exactly as
+it would have. Nothing warns you, so a successful call is not evidence the
+rung was honoured.
+
 ## What the parser understands
 
 Each page comes back labelled with a `kind`, because Workday serves seven
