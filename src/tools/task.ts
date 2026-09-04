@@ -1,7 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
-import { minifiedResult } from '../mcp.js';
 import { viewArg, viewResponse } from '../view.js';
 
 /**

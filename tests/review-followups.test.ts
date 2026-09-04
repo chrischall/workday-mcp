@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { WorkdayClient, assertReadOnlyGraphql } from '../src/client.js';
+import { minifiedResult } from '../src/mcp.js';
 import { redactTree } from '../src/redact.js';
 import { registerTaskTools } from '../src/tools/task.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -423,5 +424,28 @@ describe('read-only guard, SDL definitions (review: boundary rule assumed a `}`)
     expect(() => assertReadOnlyGraphql('fragment F on T { a } query Q { ...F }')).not.toThrow();
     expect(() => assertReadOnlyGraphql('query mutation { f }')).not.toThrow();
     expect(() => assertReadOnlyGraphql('query Q { mutation { id } }')).not.toThrow();
+  });
+});
+
+// ── PR #79 nit: the renamed export's docblock still described the old one ──
+describe('minifiedResult (review: docblock still claimed JSON.stringify(data, null, 2))', () => {
+  // `textResult` pretty-printed; `minifiedResult` does not. The rename WAS the
+  // behaviour change, and src/mcp.ts documented the behaviour it replaced — so
+  // the only reading of that file said the opposite of what the code does.
+  // Pinned here so the corrected docblock is enforceable rather than just
+  // re-worded.
+  it('emits no formatting whitespace', () => {
+    const text = minifiedResult({ a: 1, b: [2, 3], c: { d: 4 } }).content[0].text as string;
+    expect(text).toBe('{"a":1,"b":[2,3],"c":{"d":4}}');
+    expect(text.split('\n')).toHaveLength(1);
+  });
+
+  it('leaves whitespace INSIDE a value byte-for-byte alone', () => {
+    // The distinction the docblock now draws: formatting whitespace carries no
+    // information, whitespace in a value is content. A minifier over the
+    // serialised text would destroy the second while removing the first.
+    const value = 'Line one.\n\n  Indented.   ';
+    const text = minifiedResult({ value }).content[0].text as string;
+    expect(JSON.parse(text).value).toBe(value);
   });
 });
