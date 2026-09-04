@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.0](https://github.com/chrischall/workday-mcp/compare/v0.5.0...v0.6.0) (2026-09-04)
+
+
+### Features
+
+* **tools:** compact by default — strip media URLs, and minify every response ([#79](https://github.com/chrischall/workday-mcp/issues/79)) ([06b3217](https://github.com/chrischall/workday-mcp/commit/06b3217a3f78b4eaabc419efdcb6346903dc640d))
+
+
+### Bug Fixes
+
+* **build:** restore the literal em dash in the package description ([#81](https://github.com/chrischall/workday-mcp/issues/81)) ([c861cbb](https://github.com/chrischall/workday-mcp/commit/c861cbb35e75751c9768d0ee9414cfdfe0fab009))
+* **deps:** pick up @chrischall/mcp-utils 0.23.1 ([#82](https://github.com/chrischall/workday-mcp/issues/82)) ([5184fd4](https://github.com/chrischall/workday-mcp/commit/5184fd4f54ea07f646fd26911d43bce411785333))
+* **deps:** pick up @chrischall/mcp-utils 0.23.2 ([#84](https://github.com/chrischall/workday-mcp/issues/84)) ([1dce9b2](https://github.com/chrischall/workday-mcp/commit/1dce9b20385f9c1e627142391fceb6cd0d8ce658))
+* **mcp:** drop the dead minifiedResult import and correct its docblock ([#85](https://github.com/chrischall/workday-mcp/issues/85)) ([126f849](https://github.com/chrischall/workday-mcp/commit/126f849892e4b9285544b14ffa640d53db62f294))
+
+
+### Documentation
+
+* **mint:** declare WORKDAY_DEBUG in mint.yaml ([#69](https://github.com/chrischall/workday-mcp/issues/69)) ([cc77f5b](https://github.com/chrischall/workday-mcp/commit/cc77f5b0c181bacee735b04a2419c101c38c8195))
+
 ## [0.5.0](https://github.com/chrischall/workday-mcp/compare/v0.4.1...v0.5.0) (2026-08-29)
 
 
