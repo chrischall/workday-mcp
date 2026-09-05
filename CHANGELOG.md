@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/chrischall/workday-mcp/compare/v0.6.0...v0.6.1) (2026-09-04)
+
+
+### Documentation
+
+* **skill:** document the `view` response-shape parameter ([#86](https://github.com/chrischall/workday-mcp/issues/86)) ([a923537](https://github.com/chrischall/workday-mcp/commit/a9235371f03c0179f91456dcf7ecd96475697de7))
+
 ## [0.6.0](https://github.com/chrischall/workday-mcp/compare/v0.5.0...v0.6.0) (2026-09-04)
 
 
