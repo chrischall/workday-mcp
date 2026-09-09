@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/chrischall/workday-mcp/compare/v0.6.1...v0.6.2) (2026-09-09)
+
+
+### Bug Fixes
+
+* **deps:** require @fetchproxy/server ^2.7.0, the first that reads FETCHPROXY_IDENTITY_DIR ([#93](https://github.com/chrischall/workday-mcp/issues/93)) ([6e6e867](https://github.com/chrischall/workday-mcp/commit/6e6e8670cea5148680d9b4810272b92f11ea1cda))
+
 ## [0.6.1](https://github.com/chrischall/workday-mcp/compare/v0.6.0...v0.6.1) (2026-09-04)
 
 
