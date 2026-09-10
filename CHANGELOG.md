@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.3](https://github.com/chrischall/workday-mcp/compare/v0.6.2...v0.6.3) (2026-09-10)
+
+
+### Bug Fixes
+
+* **deps:** @fetchproxy/server 2.10.0 and @chrischall/mcp-utils 0.26.1 ([#97](https://github.com/chrischall/workday-mcp/issues/97)) ([0a67208](https://github.com/chrischall/workday-mcp/commit/0a67208f6783c38a38acb9891339194b9ddb938f))
+* **deps:** take @fetchproxy/server 2.9.1 so a pairing prompt survives ([#95](https://github.com/chrischall/workday-mcp/issues/95)) ([4dffd21](https://github.com/chrischall/workday-mcp/commit/4dffd2137f607b8873dba8132a2925b7ea47ffac))
+
 ## [0.6.2](https://github.com/chrischall/workday-mcp/compare/v0.6.1...v0.6.2) (2026-09-09)
 
 
