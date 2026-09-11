@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4](https://github.com/chrischall/workday-mcp/compare/v0.6.3...v0.6.4) (2026-09-11)
+
+
+### Bug Fixes
+
+* **deps:** @fetchproxy/server 2.11.3, so the hosted extension pin persists ([#100](https://github.com/chrischall/workday-mcp/issues/100)) ([ebc8aed](https://github.com/chrischall/workday-mcp/commit/ebc8aed8c42f49d187afbba08433715fa1e0f297))
+
 ## [0.6.3](https://github.com/chrischall/workday-mcp/compare/v0.6.2...v0.6.3) (2026-09-10)
 
 
