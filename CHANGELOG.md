@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.5](https://github.com/chrischall/workday-mcp/compare/v0.6.4...v0.6.5) (2026-09-15)
+
+
+### Bug Fixes
+
+* **deps:** @fetchproxy/server 3.0.1 — capped peer frames, logged load drops, atomic identity writes ([#103](https://github.com/chrischall/workday-mcp/issues/103)) ([59adf32](https://github.com/chrischall/workday-mcp/commit/59adf3292c952c59cf6bab0fcc840439d4512188))
+
 ## [0.6.4](https://github.com/chrischall/workday-mcp/compare/v0.6.3...v0.6.4) (2026-09-14)
 
 
