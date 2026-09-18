@@ -2,6 +2,9 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { createTestHarness } from '@chrischall/mcp-utils/test';
 import { WorkdayClient } from '../src/client.js';
 import { registerAppsTools } from '../src/tools/apps.js';
+import { registerPeopleTools } from '../src/tools/people.js';
+import { registerRawTools } from '../src/tools/raw.js';
+import { registerTaskTools } from '../src/tools/task.js';
 import type {
   BridgeProbeResult,
   BridgeStatus,
@@ -34,9 +37,12 @@ describe('MCP v2 tool schemas', () => {
       transport: new StubTransport(),
       tenant: 'acme',
     });
-    harness = await createTestHarness((server) =>
-      registerAppsTools(server, client)
-    );
+    harness = await createTestHarness((server) => {
+      registerAppsTools(server, client);
+      registerTaskTools(server, client);
+      registerPeopleTools(server, client);
+      registerRawTools(server, client);
+    });
 
     const tools = (await harness.client.listTools()).tools;
     const openApp = tools.find((tool) => tool.name === 'workday_open_app');
@@ -53,6 +59,37 @@ describe('MCP v2 tool schemas', () => {
     expect(getApps?.inputSchema).toMatchObject({
       type: 'object',
       properties: {},
+    });
+
+    // `viewArg()` must reach the wire as a string enum on every read tool.
+    const viewEnum = {
+      view: expect.objectContaining({
+        type: 'string',
+        enum: ['compact', 'full'],
+      }),
+    };
+    for (const name of ['workday_get_task', 'workday_get_worker_task']) {
+      const tool = tools.find((t) => t.name === name);
+      expect(tool?.inputSchema, name).toMatchObject({
+        type: 'object',
+        properties: viewEnum,
+      });
+      expect(tool?.inputSchema.required ?? [], name).not.toContain('view');
+    }
+
+    // z.record(z.string(), z.unknown()) must serialize as an open object map.
+    const graphql = tools.find((tool) => tool.name === 'workday_graphql');
+    expect(graphql?.inputSchema).toMatchObject({
+      type: 'object',
+      required: ['query'],
+      properties: {
+        query: expect.objectContaining({ type: 'string' }),
+        variables: expect.objectContaining({
+          type: 'object',
+          propertyNames: { type: 'string' },
+          additionalProperties: {},
+        }),
+      },
     });
   });
 });
