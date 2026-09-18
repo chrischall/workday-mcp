@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.0](https://github.com/chrischall/workday-mcp/compare/v0.6.5...v1.0.0) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** migrate server to SDK v2 ([#109](https://github.com/chrischall/workday-mcp/issues/109))
+
+### Features
+
+* **mcp:** migrate server to SDK v2 ([#109](https://github.com/chrischall/workday-mcp/issues/109)) ([857bff8](https://github.com/chrischall/workday-mcp/commit/857bff8f6b57e4a4ae7379c2ba4882e40187857e))
+
+
+### Bug Fixes
+
+* **deps:** Bump the production-dependencies group with 2 updates ([#107](https://github.com/chrischall/workday-mcp/issues/107)) ([d28d938](https://github.com/chrischall/workday-mcp/commit/d28d9383404a84da66ad59b4a477c740e2208998))
+
 ## [0.6.5](https://github.com/chrischall/workday-mcp/compare/v0.6.4...v0.6.5) (2026-09-15)
 
 
