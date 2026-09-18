@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { registerHealthcheckTools } from '../src/tools/healthcheck.js';
 import { WorkdayClient } from '../src/client.js';
 import type {

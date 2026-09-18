@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
 import { minifiedResult } from '../mcp.js';
@@ -16,7 +16,10 @@ const DEFAULT_MAX_BYTES = 60_000;
  * response, so both run it through the redactor first: the typed parsers are
  * safe by construction (allowlist), these are safe by denylist.
  */
-export function registerRawTools(server: McpServer, client: WorkdayClient): void {
+export function registerRawTools(
+  server: McpServer,
+  client: WorkdayClient
+): void {
   server.registerTool(
     'workday_fetch',
     {
@@ -33,19 +36,23 @@ export function registerRawTools(server: McpServer, client: WorkdayClient): void
         idempotentHint: true,
         openWorldHint: true,
       },
-      inputSchema: {
+      inputSchema: z.object({
         path: z
           .string()
           .min(1)
-          .describe('Workday path, e.g. `/acme/inst/1$715/247$42.htmld` or `2998$43525`.'),
+          .describe(
+            'Workday path, e.g. `/acme/inst/1$715/247$42.htmld` or `2998$43525`.'
+          ),
         maxBytes: z
           .number()
           .int()
           .positive()
           .max(400_000)
           .optional()
-          .describe(`Payload cap before truncation (default ${DEFAULT_MAX_BYTES}).`),
-      },
+          .describe(
+            `Payload cap before truncation (default ${DEFAULT_MAX_BYTES}).`
+          ),
+      }),
     },
     async ({ path, maxBytes }) => {
       const raw = await client.fetchRawJson(path);
@@ -70,8 +77,11 @@ export function registerRawTools(server: McpServer, client: WorkdayClient): void
         idempotentHint: false,
         openWorldHint: true,
       },
-      inputSchema: {
-        query: z.string().min(1).describe('A GraphQL `query` document. Mutations are rejected.'),
+      inputSchema: z.object({
+        query: z
+          .string()
+          .min(1)
+          .describe('A GraphQL `query` document. Mutations are rejected.'),
         variables: z
           .record(z.string(), z.unknown())
           .optional()
@@ -79,15 +89,19 @@ export function registerRawTools(server: McpServer, client: WorkdayClient): void
         operationName: z
           .string()
           .optional()
-          .describe('Operation name; also sent as the `?operation=` query parameter.'),
+          .describe(
+            'Operation name; also sent as the `?operation=` query parameter.'
+          ),
         maxBytes: z
           .number()
           .int()
           .positive()
           .max(400_000)
           .optional()
-          .describe(`Payload cap before truncation (default ${DEFAULT_MAX_BYTES}).`),
-      },
+          .describe(
+            `Payload cap before truncation (default ${DEFAULT_MAX_BYTES}).`
+          ),
+      }),
     },
     async ({ query, variables, operationName, maxBytes }) => {
       const out = await client.graphql(query, variables ?? {}, operationName);

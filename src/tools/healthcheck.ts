@@ -1,6 +1,10 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { registerBridgeHealthcheckTool } from '@chrischall/mcp-utils/fetchproxy';
-import { WorkdayClient, SessionNotAuthenticatedError, WorkdayConfigError } from '../client.js';
+import {
+  WorkdayClient,
+  SessionNotAuthenticatedError,
+  WorkdayConfigError,
+} from '../client.js';
 
 /**
  * Round-trip a small authenticated Workday endpoint through the full bridge so
@@ -26,7 +30,10 @@ import { WorkdayClient, SessionNotAuthenticatedError, WorkdayConfigError } from 
 
 const PROBE_SUFFIX = '/get-global-prefs.htmld?feature=doNotShowMobileAd';
 
-export function registerHealthcheckTools(server: McpServer, client: WorkdayClient): void {
+export function registerHealthcheckTools(
+  server: McpServer,
+  client: WorkdayClient
+): void {
   // Registration must not throw when the tenant is unset (deferred config), so
   // fall back to the bare suffix for the display URL; the probe below computes
   // the real tenant-scoped path and lets WorkdayConfigError surface.
