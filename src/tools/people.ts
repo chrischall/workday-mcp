@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
 import { minifiedResult } from '../mcp.js';
@@ -11,7 +11,10 @@ import { viewArg, viewResponse } from '../view.js';
  * and the org chart) rather than from captured task ids, because Workday's ids
  * are per-tenant: an id captured from one tenant addresses nothing on another.
  */
-export function registerPeopleTools(server: McpServer, client: WorkdayClient): void {
+export function registerPeopleTools(
+  server: McpServer,
+  client: WorkdayClient
+): void {
   server.registerTool(
     'workday_get_org_chart',
     {
@@ -26,7 +29,7 @@ export function registerPeopleTools(server: McpServer, client: WorkdayClient): v
         idempotentHint: true,
         openWorldHint: true,
       },
-      inputSchema: {},
+      inputSchema: z.object({}),
     },
     async () => {
       const org = await client.getOrgChart();
@@ -61,7 +64,7 @@ export function registerPeopleTools(server: McpServer, client: WorkdayClient): v
         idempotentHint: true,
         openWorldHint: true,
       },
-      inputSchema: {
+      inputSchema: z.object({
         worker: z
           .string()
           .min(1)
@@ -69,7 +72,7 @@ export function registerPeopleTools(server: McpServer, client: WorkdayClient): v
             'A full profile uri (e.g. `/acme/inst/1$715/247$42.htmld`) or a bare worker instance ' +
               'id (e.g. `247$42`).'
           ),
-      },
+      }),
     },
     async ({ worker }) => {
       const page = await client.getWorker(worker);
@@ -89,7 +92,7 @@ export function registerPeopleTools(server: McpServer, client: WorkdayClient): v
       description:
         'Open a single named item from a worker\'s profile — "Compensation", "Job Details", ' +
         '"Performance Reviews", "Management Chain", "Benefits", "Goals", "Pay Change History", ' +
-        'and so on. Matched case-insensitively against that worker\'s own task catalog; if it ' +
+        "and so on. Matched case-insensitively against that worker's own task catalog; if it " +
         'does not match, the error lists exactly what is available. Read-only.',
       annotations: {
         title: 'Open one task on a worker profile',
@@ -97,14 +100,19 @@ export function registerPeopleTools(server: McpServer, client: WorkdayClient): v
         idempotentHint: true,
         openWorldHint: true,
       },
-      inputSchema: {
+      inputSchema: z.object({
         view: viewArg(),
-        worker: z.string().min(1).describe('Profile uri or bare worker instance id.'),
+        worker: z
+          .string()
+          .min(1)
+          .describe('Profile uri or bare worker instance id.'),
         task: z
           .string()
           .min(1)
-          .describe('Task name as it appears on the profile, e.g. `Compensation`.'),
-      },
+          .describe(
+            'Task name as it appears on the profile, e.g. `Compensation`.'
+          ),
+      }),
     },
     async ({ worker, task, view }) => {
       const out = await client.getWorkerTask(worker, task);
@@ -125,7 +133,7 @@ export function registerPeopleTools(server: McpServer, client: WorkdayClient): v
         idempotentHint: true,
         openWorldHint: true,
       },
-      inputSchema: {},
+      inputSchema: z.object({}),
     },
     async () => {
       const page = await client.getMyProfile();

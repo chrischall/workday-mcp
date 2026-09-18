@@ -3,7 +3,7 @@ import { WorkdayClient, assertReadOnlyGraphql } from '../src/client.js';
 import { minifiedResult } from '../src/mcp.js';
 import { redactTree } from '../src/redact.js';
 import { registerTaskTools } from '../src/tools/task.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import type {
   FetchInit,
   FetchResult,

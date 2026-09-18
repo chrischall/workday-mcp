@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
 import { viewArg, viewResponse } from '../view.js';
@@ -16,7 +16,10 @@ import { viewArg, viewResponse } from '../view.js';
  * or from copying the URL of a Workday page you have open (a `/d/...` SPA URL
  * is accepted and normalized to its data endpoint automatically).
  */
-export function registerTaskTools(server: McpServer, client: WorkdayClient): void {
+export function registerTaskTools(
+  server: McpServer,
+  client: WorkdayClient
+): void {
   server.registerTool(
     'workday_get_task',
     {
@@ -24,8 +27,8 @@ export function registerTaskTools(server: McpServer, client: WorkdayClient): voi
       description:
         'Fetch a Workday page (task or data card) by its path and return a structured, ' +
         'read-only view: title, current user, each section as label/value fields, navigable ' +
-        'references (instance id + drill-in uri), and the page\'s related tasks + export links. ' +
-        'The path is a Workday `*.htmld` endpoint — take it from a prior result\'s `references[].uri` ' +
+        "references (instance id + drill-in uri), and the page's related tasks + export links. " +
+        "The path is a Workday `*.htmld` endpoint — take it from a prior result's `references[].uri` " +
         'or `relatedTasks[].uri`, or paste the URL of a Workday page you have open (SPA `/d/...` URLs ' +
         'are normalized automatically). Every request rides your signed-in Workday tab. Read-only; ' +
         'no data is mutated.',
@@ -35,7 +38,7 @@ export function registerTaskTools(server: McpServer, client: WorkdayClient): voi
         idempotentHint: true,
         openWorldHint: true,
       },
-      inputSchema: {
+      inputSchema: z.object({
         view: viewArg(),
         path: z
           .string()
@@ -72,14 +75,15 @@ export function registerTaskTools(server: McpServer, client: WorkdayClient): voi
             'Cap on child cards fetched (default 12). Supplying this implies `expand` ' +
               'unless `expand: false` is passed explicitly.'
           ),
-      },
+      }),
     },
     async ({ path, expand, depth, maxCards, view }) => {
       // An explicit `expand` always wins — including `expand: false`, which
       // must NOT crawl however the other knobs are set. Otherwise, supplying
       // either crawl knob is taken as asking to expand, so `maxCards` alone is
       // no longer silently ignored.
-      const shouldCrawl = expand ?? (depth !== undefined || maxCards !== undefined);
+      const shouldCrawl =
+        expand ?? (depth !== undefined || maxCards !== undefined);
       if (!shouldCrawl) {
         const task = await client.getTask(path);
         return viewResponse(view, task);

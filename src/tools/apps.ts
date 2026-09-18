@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
 import { minifiedResult } from '../mcp.js';
@@ -10,14 +10,17 @@ import { viewArg, viewResponse } from '../view.js';
  * entry point: call it first, then pass an app's `taskId` to
  * `workday_get_task` to open it and follow its references deeper.
  */
-export function registerAppsTools(server: McpServer, client: WorkdayClient): void {
+export function registerAppsTools(
+  server: McpServer,
+  client: WorkdayClient
+): void {
   server.registerTool(
     'workday_get_apps',
     {
       title: 'List your Workday apps',
       description:
         'List the Workday apps available on your home screen, each with a launchable task id. ' +
-        'Use this to discover what you can read, then pass an app\'s `taskId` to `workday_get_task` ' +
+        "Use this to discover what you can read, then pass an app's `taskId` to `workday_get_task` " +
         'to open it. Some apps share a generic launcher id; if one returns a near-empty page, open ' +
         'the app in your browser and pass that URL to `workday_get_task` instead. Read-only.',
       annotations: {
@@ -26,7 +29,7 @@ export function registerAppsTools(server: McpServer, client: WorkdayClient): voi
         idempotentHint: true,
         openWorldHint: true,
       },
-      inputSchema: {},
+      inputSchema: z.object({}),
     },
     async () => {
       const apps = await client.getApps();
@@ -51,27 +54,33 @@ export function registerAppsTools(server: McpServer, client: WorkdayClient): voi
         idempotentHint: true,
         openWorldHint: true,
       },
-      inputSchema: {
+      inputSchema: z.object({
         view: viewArg(),
         app: z
           .string()
           .min(1)
-          .describe('App name or a distinctive part of it, e.g. `talent` or `my team`.'),
+          .describe(
+            'App name or a distinctive part of it, e.g. `talent` or `my team`.'
+          ),
         depth: z
           .number()
           .int()
           .min(0)
           .max(3)
           .optional()
-          .describe('Levels of child cards to follow (default 1, 0 = the hub page only).'),
+          .describe(
+            'Levels of child cards to follow (default 1, 0 = the hub page only).'
+          ),
         maxCards: z
           .number()
           .int()
           .min(1)
           .max(40)
           .optional()
-          .describe('Cap on child cards fetched (default 12). Each is a real browser fetch.'),
-      },
+          .describe(
+            'Cap on child cards fetched (default 12). Each is a real browser fetch.'
+          ),
+      }),
     },
     async ({ app, depth, maxCards, view }) => {
       const page = await client.openApp(app, {
