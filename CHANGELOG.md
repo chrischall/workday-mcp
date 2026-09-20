@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/chrischall/workday-mcp/compare/v1.0.0...v1.1.0) (2026-09-19)
+
+
+### Features
+
+* **deps:** take mcp-utils 1.0.0, so server/discover answers ([#112](https://github.com/chrischall/workday-mcp/issues/112)) ([b925715](https://github.com/chrischall/workday-mcp/commit/b925715605a677fbc46a7532473699fc3d99ac3c))
+
 ## [1.0.0](https://github.com/chrischall/workday-mcp/compare/v0.6.5...v1.0.0) (2026-09-18)
 
 
