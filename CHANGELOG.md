@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/chrischall/workday-mcp/compare/v1.1.0...v1.1.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* **deps:** require zod ^4.6.5 to match @chrischall/mcp-utils 2.4.0 ([#117](https://github.com/chrischall/workday-mcp/issues/117)) ([0100681](https://github.com/chrischall/workday-mcp/commit/0100681894172e9755bf339464a53c3072c71432))
+* **deps:** upgrade @chrischall/mcp-utils to 2.4.0 and @fetchproxy/* to 3.2.0 ([#115](https://github.com/chrischall/workday-mcp/issues/115)) ([48ccc80](https://github.com/chrischall/workday-mcp/commit/48ccc80a2892897977eee7f7cc13a9805c97de85))
+
 ## [1.1.0](https://github.com/chrischall/workday-mcp/compare/v1.0.0...v1.1.0) (2026-09-19)
 
 
