@@ -163,4 +163,26 @@ describe('redactTree list-card rows (fleet-audit#278)', () => {
     }) as any;
     expect(JSON.stringify(out)).not.toContain('9999');
   });
+
+  it('drops a PII moniker\'s navigation keys (instanceId, target, uri templates)', () => {
+    const out = redactTree({
+      label: { widget: 'text', value: 'Bank Account' },
+      value: {
+        widget: 'monikerList',
+        label: 'Accounts',
+        selfUriTemplate: '/acme/inst/{id}.htmld',
+        instances: [
+          { widget: 'moniker', text: '****9999', instanceId: 'IID-LEAK', target: 'TARGET-LEAK' },
+          { widget: 'link', text: 'Open', uri: '/acme/URI-LEAK.htmld' },
+        ],
+      },
+    }) as any;
+    const json = JSON.stringify(out);
+    for (const leak of ['9999', 'IID-LEAK', 'TARGET-LEAK', 'URI-LEAK', 'inst/{id}']) {
+      expect(json).not.toContain(leak);
+    }
+    // Shape survives so the parser still recognises the widgets.
+    expect(out.value.widget).toBe('monikerList');
+    expect(out.value.instances[0]).toEqual({ widget: 'moniker', text: '[redacted]' });
+  });
 });

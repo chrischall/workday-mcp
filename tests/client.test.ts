@@ -311,6 +311,65 @@ describe('WorkdayClient.getTask PII redaction (fleet-audit#278)', () => {
     ]);
   });
 
+  it('drops the navigation edge of a moniker row under a PII label', async () => {
+    // A moniker's instanceId / target are a real, navigable handle to the PII
+    // record (and the target URL can embed the account itself), so they must
+    // not ride out through `row.references` once the displayed text is withheld.
+    const { client, transport } = makeClient();
+    transport.next = {
+      status: 200,
+      url: 'https://wd5.myworkday.com/acme/x.htmld',
+      body: JSON.stringify({
+        widget: 'root',
+        title: 'Payment Elections',
+        body: {
+          widget: 'card',
+          cardContentSections: [
+            {
+              widget: 'cardContentSection',
+              contentSectionName: 'listCardItems',
+              contentSectionItems: [
+                {
+                  label: { widget: 'text', label: 'Label', value: 'Bank Account' },
+                  value: {
+                    widget: 'moniker',
+                    text: '****9999 First Bank',
+                    instanceId: '1234$ACCT-IID-LEAK',
+                    target: encodeURIComponent(
+                      'https://wd5.myworkday.com/acme/d/inst/1234$ACCT-TARGET-LEAK.htmld'
+                    ),
+                  },
+                },
+                {
+                  label: { widget: 'text', label: 'Label', value: 'Bank Accounts' },
+                  value: {
+                    widget: 'monikerList',
+                    label: 'Accounts',
+                    selfUriTemplate: '/acme/inst/{id}.htmld',
+                    instances: [{ widget: 'moniker', text: '****1111', instanceId: 'LIST-IID-LEAK' }],
+                  },
+                },
+                {
+                  label: { widget: 'text', label: 'Label', value: 'Manager' },
+                  value: { widget: 'moniker', text: 'Pat Doe', instanceId: '77$MGR' },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    };
+    const task = await client.getTask('/acme/x.htmld');
+    const json = JSON.stringify(task);
+    expect(json).not.toContain('9999');
+    expect(json).not.toContain('1111');
+    expect(json).not.toContain('ACCT-IID-LEAK');
+    expect(json).not.toContain('ACCT-TARGET-LEAK');
+    expect(json).not.toContain('LIST-IID-LEAK');
+    // A benign moniker keeps its drill-in edge.
+    expect(json).toContain('77$MGR');
+  });
+
   it('redacts grid cells under a PII column and marks them withheld', async () => {
     const { client, transport } = makeClient();
     transport.next = {

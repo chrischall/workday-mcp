@@ -116,15 +116,34 @@ function labelIsSensitive(label: unknown): boolean {
  *  text, list-card row → value/secondaryValue column widgets). */
 const DATUM_KEYS = new Set(['value', 'secondaryValue', 'text']);
 
+/** Keys that make a widget NAVIGABLE — a moniker's `instanceId` / `target`,
+ *  a link's `uri`, a monikerList's `selfUriTemplate`. Under a PII label they
+ *  are a live handle to the very record whose text was withheld (and a
+ *  `target` URL can embed the account itself), and `parseTask` would forward
+ *  them into `row.references`. They are DROPPED, not replaced: a `[redacted]`
+ *  instanceId would still resolve a template into a bogus drill-in URI. */
+const NAVIGATION_KEY_PATTERNS: readonly RegExp[] = [
+  /^instanceIds?$/i,
+  /^iid$/i,
+  /^target$/i,
+  /^(uri|url|href)$/i,
+  /uriTemplate$/i,
+];
+
+function isNavigationKey(key: string): boolean {
+  return NAVIGATION_KEY_PATTERNS.some((re) => re.test(key));
+}
+
 /** Redact a PII-labelled datum. A scalar is replaced outright; a column
  *  WIDGET keeps its shape (so the parser still recognises the row) with every
  *  datum-bearing key inside it — including a monikerList's instances —
- *  replaced. */
+ *  replaced, and every navigation key dropped. */
 function redactDatum(v: unknown): unknown {
   if (v === null || typeof v !== 'object') return REDACTED;
   if (Array.isArray(v)) return v.map(redactDatum);
   const out: Record<string, unknown> = {};
   for (const [k, inner] of Object.entries(v as Record<string, unknown>)) {
+    if (isNavigationKey(k)) continue;
     if (DATUM_KEYS.has(k) || k === 'instances') out[k] = redactDatum(inner);
     else if (isSecretKey(k)) out[k] = REDACTED;
     else out[k] = inner !== null && typeof inner === 'object' ? REDACTED : inner;
