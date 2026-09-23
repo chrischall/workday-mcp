@@ -6,9 +6,11 @@
 // hand back whatever Workday returned, envelope and all — so they need the
 // dual: an explicit DENYlist applied to the whole tree.
 //
-// Two rules, because Workday leaks along two different axes:
+// Three rules, because Workday leaks along different axes:
 //   1. KEY-based — the envelope's own secrets (`sessionSecureToken`,
-//      `flowExecutionKey`, CSRF tokens). Matched on the key name.
+//      `flowExecutionKey`, CSRF tokens), plus PII-named fields (`ssn`,
+//      `nationalIdentifier`, `bankAccountNumber`) as GraphQL returns them.
+//      Matched on the key name.
 //   2. LABEL-based — a `text` widget is `{ label, value }`, so the KEY is
 //      always the innocuous `value`; the sensitivity lives in the sibling
 //      `label`. A manager reading a direct report's profile can pull an SSN
@@ -40,6 +42,22 @@ export const SECRET_KEY_PATTERNS: readonly RegExp[] = [
   /^flowExecutionKey$/i,
   /^sessionId$/i,
   /^jsessionid$/i,
+  // Government/financial PII by KEY name — the key-axis mirror of
+  // SENSITIVE_VALUE_LABELS. A GraphQL response is plain field-keyed JSON
+  // (`{ worker: { nationalIdentifier, bankAccountNumber } }`) with no sibling
+  // `label` or grid `columns`, so neither the label nor the column rule can
+  // fire there; only the key name carries the sensitivity. Anchored at the
+  // end so descriptor siblings (`nationalIdType`, `accountType`) stay visible.
+  /ssn$/i,
+  /socialSecurity(Number)?$/i,
+  /nationalId(entifier)?(Number|Value)?$/i,
+  /taxId(entifier)?(Number)?$/i,
+  /passport(Number|Id)?$/i,
+  /licen[cs]eNumber$/i,
+  /accountNumber$/i, // accountNumber, bankAccountNumber
+  /routingNumber$/i,
+  /iban$/i,
+  /^nin$/i,
 ];
 
 /** Sibling-`label` patterns that make the accompanying `value` sensitive.
