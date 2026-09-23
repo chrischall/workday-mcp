@@ -18,7 +18,11 @@
 // SECURITY: the envelope also carries a `sessionSecureToken` (and other
 // secret-ish keys). The parser reads ONLY an explicit allowlist of envelope
 // fields and the `body` sections — it never walks the root object wholesale —
-// so secrets cannot ride out into tool output.
+// so secrets cannot ride out into tool output. Government/financial PII in
+// widget VALUES is a different axis: `WorkdayClient.getTask` runs the tree
+// through `redactTree` (src/redact.ts) before it reaches this parser.
+
+import { REDACTED } from './redact.js';
 
 export interface WorkdayField {
   label: string;
@@ -577,8 +581,14 @@ function parseGrid(grid: Obj): WorkdayGrid {
     const cells: Record<string, string> = {};
     const acc: Acc = { fields: [], references: [] };
     for (const [colId, cell] of Object.entries(cellsMap)) {
-      if (!isObj(cell)) continue;
       const label = idToLabel.get(colId) ?? colId;
+      // A PII column's cell arrives already replaced by the redactor; keep the
+      // marker so a reader sees "withheld", not a silently missing column.
+      if (cell === REDACTED) {
+        cells[label] = REDACTED;
+        continue;
+      }
+      if (!isObj(cell)) continue;
       const text = cellText(cell);
       if (text) cells[label] = text;
       const widget = str(cell.widget);

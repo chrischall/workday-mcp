@@ -212,3 +212,77 @@ describe('WorkdayClient.getTask', () => {
     expect(JSON.stringify(task)).not.toContain('LEAK-ME-NOT');
   });
 });
+
+describe('WorkdayClient.getTask PII redaction (fleet-audit#278)', () => {
+  // The typed path must apply the same label/column PII rules as the raw
+  // escape hatches — otherwise workday_get_task / get_worker_task hand back a
+  // report's bank account or SSN that workday_fetch would have redacted.
+  it('redacts a text widget whose label names PII', async () => {
+    const { client, transport } = makeClient();
+    transport.next = {
+      status: 200,
+      url: 'https://wd5.myworkday.com/acme/x.htmld',
+      body: JSON.stringify({
+        widget: 'root',
+        title: 'Payment Elections',
+        body: {
+          widget: 'card',
+          cardContentSections: [
+            {
+              widget: 'cardContentSection',
+              contentSectionName: 'Account',
+              contentSectionItems: [
+                { widget: 'text', label: 'Bank Account Number', value: '000123456789' },
+                { widget: 'text', label: 'Routing Number', value: '021000021' },
+                { widget: 'text', label: 'Bank Name', value: 'First Bank' },
+              ],
+            },
+          ],
+        },
+      }),
+    };
+    const task = await client.getTask('/acme/x.htmld');
+    const json = JSON.stringify(task);
+    expect(json).not.toContain('000123456789');
+    expect(json).not.toContain('021000021');
+    expect(task.sections[0].fields).toEqual([
+      { label: 'Bank Account Number', value: '[redacted]' },
+      { label: 'Routing Number', value: '[redacted]' },
+      { label: 'Bank Name', value: 'First Bank' },
+    ]);
+  });
+
+  it('redacts grid cells under a PII column and marks them withheld', async () => {
+    const { client, transport } = makeClient();
+    transport.next = {
+      status: 200,
+      url: 'https://wd5.myworkday.com/acme/x.htmld',
+      body: JSON.stringify({
+        widget: 'root',
+        title: 'Government IDs',
+        body: {
+          widget: 'grid',
+          label: 'National IDs',
+          columns: [
+            { columnId: '1.1', label: 'Country' },
+            { columnId: '1.2', label: 'National ID' },
+          ],
+          rows: [
+            {
+              cellsMap: {
+                '1.1': { widget: 'text', value: 'United States' },
+                '1.2': { widget: 'text', value: '123-45-6789' },
+              },
+            },
+          ],
+        },
+      }),
+    };
+    const task = await client.getTask('/acme/x.htmld');
+    expect(JSON.stringify(task)).not.toContain('123-45-6789');
+    expect(task.grids[0].rows[0].cells).toEqual({
+      Country: 'United States',
+      'National ID': '[redacted]',
+    });
+  });
+});

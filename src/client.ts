@@ -32,6 +32,10 @@ import {
 } from './parse.js';
 import { redactTree } from './redact.js';
 
+/** Redaction depth cap for the typed path — generous so it never cuts off a
+ *  subtree that `parseTask`'s own depth-40 walks (from nested sub-roots) reach. */
+const TYPED_REDACT_MAX_DEPTH = 256;
+
 const DEFAULT_HOST = 'wd5.myworkday.com';
 
 // Re-export the shared "go authenticate" error so tool code (and the
@@ -464,11 +468,20 @@ export class WorkdayClient {
     return result.body;
   }
 
-  /** Fetch a Workday data endpoint and parse it into a flat, secret-free task. */
+  /** Fetch a Workday data endpoint and parse it into a flat, secret-free task.
+   *
+   *  The parser's allowlist keeps ENVELOPE secrets out, but it copies every
+   *  text widget's `{label, value}` and every grid cell verbatim — so the
+   *  government/financial PII rules of {@link redactTree} (sibling label, grid
+   *  column) run here too, before parsing, exactly as they do for
+   *  `fetchRawJson`. Otherwise a manager's `workday_get_worker_task` would
+   *  return a report's bank account that `workday_fetch` withholds. The depth
+   *  cap is raised well past the parser's own (40, relative to sub-roots) so
+   *  redaction never truncates a subtree the parser would still read. */
   async getTask(path: string): Promise<WorkdayTask> {
     const resolved = this.resolvePath(path);
     const json = await this.fetchJson(resolved);
-    return parseTask(json);
+    return parseTask(redactTree(json, { maxDepth: TYPED_REDACT_MAX_DEPTH }));
   }
 
   /** List the user's Workday apps (label + launchable task id). */
