@@ -212,3 +212,195 @@ describe('WorkdayClient.getTask', () => {
     expect(JSON.stringify(task)).not.toContain('LEAK-ME-NOT');
   });
 });
+
+describe('WorkdayClient.getTask PII redaction (fleet-audit#278)', () => {
+  // The typed path must apply the same label/column PII rules as the raw
+  // escape hatches — otherwise workday_get_task / get_worker_task hand back a
+  // report's bank account or SSN that workday_fetch would have redacted.
+  it('redacts a text widget whose label names PII', async () => {
+    const { client, transport } = makeClient();
+    transport.next = {
+      status: 200,
+      url: 'https://wd5.myworkday.com/acme/x.htmld',
+      body: JSON.stringify({
+        widget: 'root',
+        title: 'Payment Elections',
+        body: {
+          widget: 'card',
+          cardContentSections: [
+            {
+              widget: 'cardContentSection',
+              contentSectionName: 'Account',
+              contentSectionItems: [
+                { widget: 'text', label: 'Bank Account Number', value: '000123456789' },
+                { widget: 'text', label: 'Routing Number', value: '021000021' },
+                { widget: 'text', label: 'Bank Name', value: 'First Bank' },
+              ],
+            },
+          ],
+        },
+      }),
+    };
+    const task = await client.getTask('/acme/x.htmld');
+    const json = JSON.stringify(task);
+    expect(json).not.toContain('000123456789');
+    expect(json).not.toContain('021000021');
+    expect(task.sections[0].fields).toEqual([
+      { label: 'Bank Account Number', value: '[redacted]' },
+      { label: 'Routing Number', value: '[redacted]' },
+      { label: 'Bank Name', value: 'First Bank' },
+    ]);
+  });
+
+  it('redacts a list-card row whose label COLUMN widget names PII', async () => {
+    // The main Workday card shape: each row is `{ label: <widget>, value:
+    // <widget> }`, so the human label is the label widget's `.value`, not a
+    // string `label` key — the flat-widget rule never sees it.
+    const row = (label: string, value: string, secondary?: string) => ({
+      label: { widget: 'text', label: 'Label', value: label, propertyName: 'wd:Label' },
+      value: { widget: 'text', label: 'Value', value, propertyName: 'nyw:Value' },
+      ...(secondary
+        ? {
+            secondaryValue: {
+              widget: 'text',
+              label: 'Secondary Value',
+              value: secondary,
+              propertyName: 'wd:Secondary_Value',
+            },
+          }
+        : {}),
+    });
+    const { client, transport } = makeClient();
+    transport.next = {
+      status: 200,
+      url: 'https://wd5.myworkday.com/acme/x.htmld',
+      body: JSON.stringify({
+        widget: 'root',
+        title: 'Personal Information',
+        body: {
+          widget: 'card',
+          cardContentSections: [
+            {
+              widget: 'cardContentSection',
+              contentSectionName: 'listCardItems',
+              contentSectionItems: [
+                row('National ID', '123-45-6789', 'SSN-SECONDARY-LEAK'),
+                row('Bank Account Number', '9999888877'),
+                row('Medical', '$120.00', 'Monthly'),
+              ],
+            },
+          ],
+        },
+      }),
+    };
+    const task = await client.getTask('/acme/x.htmld');
+    const json = JSON.stringify(task);
+    expect(json).not.toContain('123-45-6789');
+    expect(json).not.toContain('9999888877');
+    expect(json).not.toContain('SSN-SECONDARY-LEAK');
+    const section = task.sections[0];
+    expect(section.fields).toEqual([
+      { label: 'National ID', value: '[redacted] ([redacted])' },
+      { label: 'Bank Account Number', value: '[redacted]' },
+      { label: 'Medical', value: '$120.00 (Monthly)' },
+    ]);
+    expect(section.rows.map((r) => r.cells)).toEqual([
+      { label: 'National ID', value: '[redacted]', secondaryValue: '[redacted]' },
+      { label: 'Bank Account Number', value: '[redacted]' },
+      { label: 'Medical', value: '$120.00', secondaryValue: 'Monthly' },
+    ]);
+  });
+
+  it('drops the navigation edge of a moniker row under a PII label', async () => {
+    // A moniker's instanceId / target are a real, navigable handle to the PII
+    // record (and the target URL can embed the account itself), so they must
+    // not ride out through `row.references` once the displayed text is withheld.
+    const { client, transport } = makeClient();
+    transport.next = {
+      status: 200,
+      url: 'https://wd5.myworkday.com/acme/x.htmld',
+      body: JSON.stringify({
+        widget: 'root',
+        title: 'Payment Elections',
+        body: {
+          widget: 'card',
+          cardContentSections: [
+            {
+              widget: 'cardContentSection',
+              contentSectionName: 'listCardItems',
+              contentSectionItems: [
+                {
+                  label: { widget: 'text', label: 'Label', value: 'Bank Account' },
+                  value: {
+                    widget: 'moniker',
+                    text: '****9999 First Bank',
+                    instanceId: '1234$ACCT-IID-LEAK',
+                    target: encodeURIComponent(
+                      'https://wd5.myworkday.com/acme/d/inst/1234$ACCT-TARGET-LEAK.htmld'
+                    ),
+                  },
+                },
+                {
+                  label: { widget: 'text', label: 'Label', value: 'Bank Accounts' },
+                  value: {
+                    widget: 'monikerList',
+                    label: 'Accounts',
+                    selfUriTemplate: '/acme/inst/{id}.htmld',
+                    instances: [{ widget: 'moniker', text: '****1111', instanceId: 'LIST-IID-LEAK' }],
+                  },
+                },
+                {
+                  label: { widget: 'text', label: 'Label', value: 'Manager' },
+                  value: { widget: 'moniker', text: 'Pat Doe', instanceId: '77$MGR' },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    };
+    const task = await client.getTask('/acme/x.htmld');
+    const json = JSON.stringify(task);
+    expect(json).not.toContain('9999');
+    expect(json).not.toContain('1111');
+    expect(json).not.toContain('ACCT-IID-LEAK');
+    expect(json).not.toContain('ACCT-TARGET-LEAK');
+    expect(json).not.toContain('LIST-IID-LEAK');
+    // A benign moniker keeps its drill-in edge.
+    expect(json).toContain('77$MGR');
+  });
+
+  it('redacts grid cells under a PII column and marks them withheld', async () => {
+    const { client, transport } = makeClient();
+    transport.next = {
+      status: 200,
+      url: 'https://wd5.myworkday.com/acme/x.htmld',
+      body: JSON.stringify({
+        widget: 'root',
+        title: 'Government IDs',
+        body: {
+          widget: 'grid',
+          label: 'National IDs',
+          columns: [
+            { columnId: '1.1', label: 'Country' },
+            { columnId: '1.2', label: 'National ID' },
+          ],
+          rows: [
+            {
+              cellsMap: {
+                '1.1': { widget: 'text', value: 'United States' },
+                '1.2': { widget: 'text', value: '123-45-6789' },
+              },
+            },
+          ],
+        },
+      }),
+    };
+    const task = await client.getTask('/acme/x.htmld');
+    expect(JSON.stringify(task)).not.toContain('123-45-6789');
+    expect(task.grids[0].rows[0].cells).toEqual({
+      Country: 'United States',
+      'National ID': '[redacted]',
+    });
+  });
+});

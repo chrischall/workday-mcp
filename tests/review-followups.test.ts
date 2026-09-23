@@ -67,6 +67,66 @@ describe('workday_graphql redaction (review: response bypassed the redactor)', (
   });
 });
 
+describe('workday_graphql PII redaction by key name (fleet-audit#279)', () => {
+  // A GraphQL response is plain field-keyed JSON — no sibling `label`, no grid
+  // `columns` — so only a KEY-name rule can catch government/financial PII.
+  it('redacts PII-named fields in a GraphQL-shaped response', async () => {
+    const gqlPath = '/wday/pex/graphql/graphql?operation=W';
+    const { client } = makeClient({
+      [APPS]: { widget: 'configuredApps', children: [] },
+      [gqlPath]: {
+        data: {
+          worker: {
+            name: 'Jane Doe',
+            ssn: '123-45-6789',
+            socialSecurityNumber: '123-45-6789',
+            nationalIdentifier: 'AB123456C',
+            nationalId: 'AB123456C',
+            nationalIdType: 'NINO',
+            taxId: '98-7654321',
+            passportNumber: 'X1234567',
+            driversLicenseNumber: 'D1234567',
+            nin: 'AB123456C',
+            paymentElections: [
+              {
+                bankName: 'First Bank',
+                accountType: 'Checking',
+                bankAccountNumber: '000123456789',
+                accountNumber: '000123456789',
+                routingNumber: '021000021',
+                iban: 'GB33BUKB20201555555555',
+              },
+            ],
+          },
+        },
+      },
+    });
+    const out = (await client.graphql('query W { worker { name } }', {}, 'W')) as any;
+    const json = JSON.stringify(out);
+    for (const secret of [
+      '123-45-6789',
+      'AB123456C',
+      '98-7654321',
+      'X1234567',
+      'D1234567',
+      '000123456789',
+      '021000021',
+      'GB33BUKB20201555555555',
+    ]) {
+      expect(json).not.toContain(secret);
+    }
+    const w = out.data.worker;
+    expect(w.ssn).toBe('[redacted]');
+    expect(w.nationalIdentifier).toBe('[redacted]');
+    expect(w.paymentElections[0].routingNumber).toBe('[redacted]');
+    // benign siblings survive — over-redaction would gut the tool
+    expect(w.name).toBe('Jane Doe');
+    expect(w.nationalIdType).toBe('NINO');
+    expect(w.paymentElections[0].bankName).toBe('First Bank');
+    expect(w.paymentElections[0].accountType).toBe('Checking');
+  });
+});
+
 // ── Important #2 ────────────────────────────────────────────────────────────
 describe('read-only guard (review: `#` inside a string blanked the rest of the line)', () => {
   it('refuses a mutation hidden behind a `#` inside a string literal', () => {
@@ -447,5 +507,38 @@ describe('minifiedResult (review: docblock still claimed JSON.stringify(data, nu
     const value = 'Line one.\n\n  Indented.   ';
     const text = minifiedResult({ value }).content[0].text as string;
     expect(JSON.parse(text).value).toBe(value);
+  });
+});
+
+describe('workday_graphql PII redaction cannot be bypassed by aliases (fleet-audit#279)', () => {
+  // Key-name redaction matches the RESPONSE key, and a GraphQL alias renames
+  // it: `a: nationalIdentifier` comes back as `{ a: ... }`. So an aliased
+  // selection of a PII- or secret-named field is refused up front.
+  it('refuses an aliased PII field', () => {
+    expect(() =>
+      assertReadOnlyGraphql('query { worker { a: nationalIdentifier b: bankAccountNumber } }')
+    ).toThrow(/alias/i);
+    expect(() => assertReadOnlyGraphql('{ worker { x , : , ssn } }')).toThrow(/alias/i);
+    expect(() => assertReadOnlyGraphql('{ me { t: sessionSecureToken } }')).toThrow(/alias/i);
+    expect(() =>
+      assertReadOnlyGraphql('query { w: worker { ids: nationalIds { v: value } } }')
+    ).toThrow(/alias/i);
+  });
+
+  it('allows aliases of benign fields and colons in arguments', () => {
+    expect(() =>
+      assertReadOnlyGraphql('query Q($id: ID! = "x") { w: worker(id: $id, ssn: "no") { n: name } }')
+    ).not.toThrow();
+    expect(() => assertReadOnlyGraphql('{ worker { ssn nationalIdType } }')).not.toThrow();
+  });
+
+  it('refuses before any request is sent', async () => {
+    const { client, transport } = makeClient({
+      [APPS]: { widget: 'configuredApps', children: [] },
+    });
+    await expect(
+      client.graphql('query { worker { a: nationalIdentifier } }', {})
+    ).rejects.toThrow(/alias/i);
+    expect(transport.calls.filter((c) => c.path.includes('graphql'))).toEqual([]);
   });
 });
