@@ -727,15 +727,21 @@ export class WorkdayClient {
    * `sessionSecureToken`. We hold that token privately (captured off any JSON
    * response we have already fetched — see `rememberSessionToken`) and send it
    * as a header; it is NEVER returned to a caller.
+   *
+   * `opts.retryOnTimeout` re-sends once after a bridge timeout. Leave it unset
+   * (the default) for anything that might write; only a provably read-only
+   * POST — {@link graphql}, whose document is guarded to `query` — sets it.
    */
   async postJson(
     path: string,
     body: unknown,
-    headers: Record<string, string> = {}
+    headers: Record<string, string> = {},
+    opts: { retryOnTimeout?: boolean } = {}
   ): Promise<unknown> {
     const result = await this.transport.fetch({
       path,
       method: 'POST',
+      ...(opts.retryOnTimeout ? { retryOnTimeout: true } : {}),
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
@@ -783,11 +789,19 @@ export class WorkdayClient {
     assertReadOnlyGraphql(query);
     const op = operationName ? `?operation=${encodeURIComponent(operationName)}` : '';
     await this.primeSessionToken();
-    const response = await this.postJson(`/wday/pex/graphql/graphql${op}`, {
-      query,
-      variables,
-      ...(operationName ? { operationName } : {}),
-    });
+    // Read-only by the guard above (`query` operations only), so a bridge
+    // timeout is safe to retry — fetchproxy >= 3.2.0 no longer re-sends POSTs
+    // unless asked (chrischall/fleet-audit#312).
+    const response = await this.postJson(
+      `/wday/pex/graphql/graphql${op}`,
+      {
+        query,
+        variables,
+        ...(operationName ? { operationName } : {}),
+      },
+      {},
+      { retryOnTimeout: true }
+    );
     // Same contract as `fetchRawJson`: this hands back Workday's own payload,
     // so it gets the denylist. Returning it raw would have contradicted what
     // src/redact.ts, src/tools/raw.ts and CLAUDE.md all promise.
