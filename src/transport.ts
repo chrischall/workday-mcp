@@ -21,6 +21,11 @@ export interface FetchInit {
   /** Serialized request body. JSON callers stringify before calling.
    *  Omitted for GETs. */
   body?: string;
+  /** Re-send once if the bridge times out (fetchproxy >= 3.2.0). Omit for
+   *  fetchproxy's default: GETs retry, POST/PUT/DELETE are sent exactly once.
+   *  Set `true` ONLY for a provably read-only POST (a GraphQL `query`) —
+   *  re-sending a real write after a timeout could apply it twice. */
+  retryOnTimeout?: boolean;
 }
 
 export interface FetchResult {

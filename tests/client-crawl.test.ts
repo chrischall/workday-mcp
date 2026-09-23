@@ -182,6 +182,23 @@ describe('WorkdayClient.graphql', () => {
     expect(JSON.parse(post!.body!).query).toContain('query Inbox');
   });
 
+  it('opts the read-only GraphQL POST into retryOnTimeout (fleet-audit#312)', async () => {
+    const path = '/wday/pex/graphql/graphql?operation=Inbox';
+    const { client, transport } = makeClient({ [path]: { data: { inbox: [] } } });
+    await client.graphql('query Inbox { inbox { id } }', {}, 'Inbox');
+    const post = transport.calls.find((c) => c.method === 'POST');
+    expect(post?.retryOnTimeout).toBe(true);
+  });
+
+  it('does NOT opt a generic postJson (possible write) into retryOnTimeout', async () => {
+    const path = '/acme/task/save.htmld';
+    const { client, transport } = makeClient({ [path]: { ok: true } });
+    await client.postJson(path, { field: 'value' });
+    const post = transport.calls.find((c) => c.method === 'POST');
+    expect(post).toBeDefined();
+    expect(post?.retryOnTimeout).toBeUndefined();
+  });
+
   it('is not fooled by the word mutation inside a field name or string', async () => {
     const path = '/wday/pex/graphql/graphql?operation=Q';
     const { client } = makeClient({ [path]: { data: {} } });
