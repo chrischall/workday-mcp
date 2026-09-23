@@ -509,3 +509,36 @@ describe('minifiedResult (review: docblock still claimed JSON.stringify(data, nu
     expect(JSON.parse(text).value).toBe(value);
   });
 });
+
+describe('workday_graphql PII redaction cannot be bypassed by aliases (fleet-audit#279)', () => {
+  // Key-name redaction matches the RESPONSE key, and a GraphQL alias renames
+  // it: `a: nationalIdentifier` comes back as `{ a: ... }`. So an aliased
+  // selection of a PII- or secret-named field is refused up front.
+  it('refuses an aliased PII field', () => {
+    expect(() =>
+      assertReadOnlyGraphql('query { worker { a: nationalIdentifier b: bankAccountNumber } }')
+    ).toThrow(/alias/i);
+    expect(() => assertReadOnlyGraphql('{ worker { x , : , ssn } }')).toThrow(/alias/i);
+    expect(() => assertReadOnlyGraphql('{ me { t: sessionSecureToken } }')).toThrow(/alias/i);
+    expect(() =>
+      assertReadOnlyGraphql('query { w: worker { ids: nationalIds { v: value } } }')
+    ).toThrow(/alias/i);
+  });
+
+  it('allows aliases of benign fields and colons in arguments', () => {
+    expect(() =>
+      assertReadOnlyGraphql('query Q($id: ID! = "x") { w: worker(id: $id, ssn: "no") { n: name } }')
+    ).not.toThrow();
+    expect(() => assertReadOnlyGraphql('{ worker { ssn nationalIdType } }')).not.toThrow();
+  });
+
+  it('refuses before any request is sent', async () => {
+    const { client, transport } = makeClient({
+      [APPS]: { widget: 'configuredApps', children: [] },
+    });
+    await expect(
+      client.graphql('query { worker { a: nationalIdentifier } }', {})
+    ).rejects.toThrow(/alias/i);
+    expect(transport.calls.filter((c) => c.path.includes('graphql'))).toEqual([]);
+  });
+});

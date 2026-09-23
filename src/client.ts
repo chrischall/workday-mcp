@@ -30,7 +30,7 @@ import {
   type WorkdayReference,
   type WorkdayOrgChart,
 } from './parse.js';
-import { redactTree } from './redact.js';
+import { isSecretKey, redactTree } from './redact.js';
 
 /** Redaction depth cap for the typed path — generous so it never cuts off a
  *  subtree that `parseTask`'s own depth-40 walks (from nested sub-roots) reach. */
@@ -310,6 +310,55 @@ function findWriteOperation(cleaned: string): WriteScan {
   return { kind: 'read' };
 }
 
+/**
+ * Find an ALIASED selection of a secret- or PII-named field.
+ *
+ * The response redactor matches PII by KEY name (`ssn`, `nationalIdentifier`,
+ * `bankAccountNumber`), because GraphQL returns plain field-keyed JSON with no
+ * sibling label to go on. But the response key is the caller's to choose: an
+ * alias renames it, so `{ worker { a: nationalIdentifier } }` comes back as
+ * `{ a: "..." }` and no key pattern can fire. One token defeats the redactor,
+ * and the threat model is exactly a model (or an instruction injected into
+ * fetched content) writing the query.
+ *
+ * An alias is `Name : Name` inside a selection set. Colons also appear in
+ * variable definitions, arguments and object values, but every one of those
+ * sits inside parentheses, so only colons at paren depth 0 and brace depth >=
+ * 1 are aliases. Works on the lexed document, where strings and comments are
+ * already blanked. Returns the aliased field name, or null.
+ */
+function findSensitiveAlias(cleaned: string): string | null {
+  let braceDepth = 0;
+  let parenDepth = 0;
+  // Set when a `:` has just been seen in alias position: the next Name is the
+  // real field being selected.
+  let afterAliasColon = false;
+  let i = 0;
+  while (i < cleaned.length) {
+    const ch = cleaned[i];
+    if (isIgnoredChar(ch)) {
+      i++;
+      continue;
+    }
+    if (isNameStart(ch)) {
+      let j = i;
+      while (j < cleaned.length && isNameChar(cleaned[j])) j++;
+      if (afterAliasColon && isSecretKey(cleaned.slice(i, j))) return cleaned.slice(i, j);
+      afterAliasColon = false;
+      i = j;
+      continue;
+    }
+    afterAliasColon = false;
+    if (ch === '(' || ch === '[') parenDepth++;
+    else if (ch === ')' || ch === ']') parenDepth = Math.max(0, parenDepth - 1);
+    else if (ch === '{') braceDepth++;
+    else if (ch === '}') braceDepth = Math.max(0, braceDepth - 1);
+    else if (ch === ':' && braceDepth >= 1 && parenDepth === 0) afterAliasColon = true;
+    i++;
+  }
+  return null;
+}
+
 /** Throw unless `query` declares only read operations. workday-mcp is
  *  read-only, and a GraphQL passthrough is the one place a caller could
  *  otherwise hand Workday a write. */
@@ -338,6 +387,14 @@ export function assertReadOnlyGraphql(query: string): void {
       `workday-mcp could not verify this GraphQL document is read-only: it contains a ` +
         `\`${scan.keyword}\` type-system definition, whose extent cannot be tracked reliably. ` +
         'Send only executable operations (`query` / `fragment`).'
+    );
+  }
+  const aliased = findSensitiveAlias(cleaned);
+  if (aliased) {
+    throw new Error(
+      `workday-mcp refuses to alias the sensitive field \`${aliased}\`: response redaction ` +
+        'matches PII and secret fields by their key name, and an alias would rename it out ' +
+        'of reach. Select the field under its own name (it will come back redacted).'
     );
   }
 }

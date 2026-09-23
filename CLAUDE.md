@@ -21,7 +21,9 @@ every request rides the user's signed-in `*.myworkday.com` tab.
 - `src/redact.ts` — the DUAL of the parser's allowlist: a denylist applied to
   raw envelopes returned by `workday_fetch` / `workday_graphql`, covering secret
   and PII key names (GraphQL's field-keyed JSON has no labels) plus values
-  whose sibling `label` (or grid column) names government/financial PII. `getTask` runs it BEFORE `parseTask` too, because
+  whose sibling `label` (a string, or a list-card row's `label` column
+  widget) or grid column names government/financial PII. Key-name matching is
+  only sound because `assertReadOnlyGraphql` refuses aliasing such a field. `getTask` runs it BEFORE `parseTask` too, because
   the allowlist keeps envelope secrets out but copies widget values verbatim.
 - `src/client.ts` — deferred config (`WORKDAY_TENANT` required, `WORKDAY_HOST`
   defaulted), the `fetchJson`/`postJson` primitives, path normalization (strips
