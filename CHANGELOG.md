@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/chrischall/workday-mcp/compare/v1.1.1...v1.1.2) (2026-09-23)
+
+
+### Bug Fixes
+
+* **security:** redact government and financial PII from typed and raw Workday reads ([#119](https://github.com/chrischall/workday-mcp/issues/119)) ([59921ed](https://github.com/chrischall/workday-mcp/commit/59921ed1d9fcbb141619d940a77c19909010f823))
+
 ## [1.1.1](https://github.com/chrischall/workday-mcp/compare/v1.1.0...v1.1.1) (2026-09-23)
 
 
