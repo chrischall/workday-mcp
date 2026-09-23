@@ -46,17 +46,22 @@ export const SECRET_KEY_PATTERNS: readonly RegExp[] = [
   // SENSITIVE_VALUE_LABELS. A GraphQL response is plain field-keyed JSON
   // (`{ worker: { nationalIdentifier, bankAccountNumber } }`) with no sibling
   // `label` or grid `columns`, so neither the label nor the column rule can
-  // fire there; only the key name carries the sensitivity. Anchored at the
-  // end so descriptor siblings (`nationalIdType`, `accountType`) stay visible.
-  /ssn$/i,
-  /socialSecurity(Number)?$/i,
-  /nationalId(entifier)?(Number|Value)?$/i,
-  /taxId(entifier)?(Number)?$/i,
-  /passport(Number|Id)?$/i,
-  /licen[cs]eNumber$/i,
-  /accountNumber$/i, // accountNumber, bankAccountNumber
-  /routingNumber$/i,
-  /iban$/i,
+  // fire there; only the key name carries the sensitivity. Plurals and the
+  // long spellings are covered too: a worker can hold several national IDs or
+  // bank accounts, so list-valued fields (`nationalIds`, `bankAccounts`) are a
+  // likely GraphQL shape. Still anchored at the end so descriptor siblings
+  // (`nationalIdType`, `accountType`, `passportCountry`) stay visible.
+  /ssns?$/i,
+  /socialSecurity(Numbers?)?$/i,
+  /nationalId(entifier|entification)?s?(Numbers?|Values?)?$/i,
+  /taxId(entifier|entification)?s?(Numbers?)?$/i,
+  /governmentId(entifier|entification)?s?(Numbers?)?$/i,
+  /passports?(Numbers?|Ids?)?$/i,
+  /licen[cs]eNumbers?$/i,
+  /accountNumbers?$/i, // accountNumber, bankAccountNumbers
+  /bankAccounts?$/i,
+  /routingNumbers?$/i,
+  /ibans?$/i,
   /^nin$/i,
 ];
 

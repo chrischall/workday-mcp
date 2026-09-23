@@ -73,3 +73,60 @@ describe('redactTree', () => {
     expect(redactTree(null)).toBe(null);
   });
 });
+
+describe('redactTree PII key names: plurals and long spellings (fleet-audit#279)', () => {
+  // A worker can hold several national IDs / bank accounts, so list-valued
+  // GraphQL fields are a likely shape. Each must be redacted wholesale.
+  const cases: Array<[string, unknown]> = [
+    ['nationalIds', [{ id: '123-45-6789' }]],
+    ['nationalIdentifiers', ['123-45-6789']],
+    ['nationalIdentification', '123-45-6789'],
+    ['nationalIdentificationNumber', '123-45-6789'],
+    ['nationalIdentifierValues', ['123-45-6789']],
+    ['nationalIdNumbers', ['123-45-6789']],
+    ['taxIdentificationNumber', '123-45-6789'],
+    ['taxIdentifiers', ['123-45-6789']],
+    ['taxIds', ['123-45-6789']],
+    ['governmentId', '123-45-6789'],
+    ['governmentIds', ['123-45-6789']],
+    ['governmentIdentifier', '123-45-6789'],
+    ['governmentIdentifiers', ['123-45-6789']],
+    ['bankAccounts', [{ number: '123-45-6789' }]],
+    ['bankAccount', { number: '123-45-6789' }],
+    ['accountNumbers', ['123-45-6789']],
+    ['bankAccountNumbers', ['123-45-6789']],
+    ['routingNumbers', ['123-45-6789']],
+    ['passports', [{ number: '123-45-6789' }]],
+    ['passportNumbers', ['123-45-6789']],
+    ['passportIds', ['123-45-6789']],
+    ['licenseNumbers', ['123-45-6789']],
+    ['ssns', ['123-45-6789']],
+    ['socialSecurityNumbers', ['123-45-6789']],
+    ['ibans', ['123-45-6789']],
+  ];
+  for (const [key, value] of cases) {
+    it(`redacts ${key}`, () => {
+      const out = redactTree({ worker: { [key]: value } }) as {
+        worker: Record<string, unknown>;
+      };
+      expect(JSON.stringify(out)).not.toContain('123-45-6789');
+      expect(out.worker[key]).toBe('[redacted]');
+    });
+  }
+
+  it('keeps descriptor siblings visible', () => {
+    const benign = {
+      nationalIdType: 'NINO',
+      nationalIdTypes: ['NINO'],
+      nationalIdCountry: 'GB',
+      taxIdType: 'EIN',
+      governmentIdType: 'Passport',
+      accountType: 'Checking',
+      bankAccountType: 'Savings',
+      bankName: 'First Bank',
+      passportCountry: 'US',
+      accountNumberFormat: 'numeric',
+    };
+    expect(redactTree({ worker: benign })).toEqual({ worker: benign });
+  });
+});
