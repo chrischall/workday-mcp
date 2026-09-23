@@ -252,6 +252,65 @@ describe('WorkdayClient.getTask PII redaction (fleet-audit#278)', () => {
     ]);
   });
 
+  it('redacts a list-card row whose label COLUMN widget names PII', async () => {
+    // The main Workday card shape: each row is `{ label: <widget>, value:
+    // <widget> }`, so the human label is the label widget's `.value`, not a
+    // string `label` key — the flat-widget rule never sees it.
+    const row = (label: string, value: string, secondary?: string) => ({
+      label: { widget: 'text', label: 'Label', value: label, propertyName: 'wd:Label' },
+      value: { widget: 'text', label: 'Value', value, propertyName: 'nyw:Value' },
+      ...(secondary
+        ? {
+            secondaryValue: {
+              widget: 'text',
+              label: 'Secondary Value',
+              value: secondary,
+              propertyName: 'wd:Secondary_Value',
+            },
+          }
+        : {}),
+    });
+    const { client, transport } = makeClient();
+    transport.next = {
+      status: 200,
+      url: 'https://wd5.myworkday.com/acme/x.htmld',
+      body: JSON.stringify({
+        widget: 'root',
+        title: 'Personal Information',
+        body: {
+          widget: 'card',
+          cardContentSections: [
+            {
+              widget: 'cardContentSection',
+              contentSectionName: 'listCardItems',
+              contentSectionItems: [
+                row('National ID', '123-45-6789', 'SSN-SECONDARY-LEAK'),
+                row('Bank Account Number', '9999888877'),
+                row('Medical', '$120.00', 'Monthly'),
+              ],
+            },
+          ],
+        },
+      }),
+    };
+    const task = await client.getTask('/acme/x.htmld');
+    const json = JSON.stringify(task);
+    expect(json).not.toContain('123-45-6789');
+    expect(json).not.toContain('9999888877');
+    expect(json).not.toContain('SSN-SECONDARY-LEAK');
+    const section = task.sections[0];
+    expect(section.fields).toEqual([
+      { label: 'National ID', value: '[redacted] ([redacted])' },
+      { label: 'Bank Account Number', value: '[redacted]' },
+      { label: 'Medical', value: '$120.00 (Monthly)' },
+    ]);
+    expect(section.rows.map((r) => r.cells)).toEqual([
+      { label: 'National ID', value: '[redacted]', secondaryValue: '[redacted]' },
+      { label: 'Bank Account Number', value: '[redacted]' },
+      { label: 'Medical', value: '$120.00', secondaryValue: 'Monthly' },
+    ]);
+  });
+
   it('redacts grid cells under a PII column and marks them withheld', async () => {
     const { client, transport } = makeClient();
     transport.next = {

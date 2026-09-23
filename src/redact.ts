@@ -90,12 +90,46 @@ export interface RedactOptions {
 
 const DEFAULT_MAX_DEPTH = 40;
 
-function isSecretKey(key: string): boolean {
+/** True when a key NAME is a secret or government/financial PII field. Also
+ *  used by the GraphQL guard to refuse aliasing such a field to an innocuous
+ *  response key, which would otherwise sail past this key-based rule. */
+export function isSecretKey(key: string): boolean {
   return SECRET_KEY_PATTERNS.some((re) => re.test(key));
 }
 
 function isSensitiveLabel(label: unknown): boolean {
   return typeof label === 'string' && SENSITIVE_VALUE_LABELS.some((re) => re.test(label));
+}
+
+/** The human label of an object: either a plain string `label` (a flat `text`
+ *  widget) or — the main list-card row shape — a `label` COLUMN widget whose
+ *  own `.value` (or a moniker's `.text`) carries the label text. */
+function labelIsSensitive(label: unknown): boolean {
+  if (isSensitiveLabel(label)) return true;
+  if (label === null || typeof label !== 'object' || Array.isArray(label)) return false;
+  const w = label as Record<string, unknown>;
+  return isSensitiveLabel(w.value) || isSensitiveLabel(w.text);
+}
+
+/** Keys that carry a widget's displayed datum. Under a PII label every one of
+ *  them is withheld, whatever the widget kind (`text` → value, `moniker` →
+ *  text, list-card row → value/secondaryValue column widgets). */
+const DATUM_KEYS = new Set(['value', 'secondaryValue', 'text']);
+
+/** Redact a PII-labelled datum. A scalar is replaced outright; a column
+ *  WIDGET keeps its shape (so the parser still recognises the row) with every
+ *  datum-bearing key inside it — including a monikerList's instances —
+ *  replaced. */
+function redactDatum(v: unknown): unknown {
+  if (v === null || typeof v !== 'object') return REDACTED;
+  if (Array.isArray(v)) return v.map(redactDatum);
+  const out: Record<string, unknown> = {};
+  for (const [k, inner] of Object.entries(v as Record<string, unknown>)) {
+    if (DATUM_KEYS.has(k) || k === 'instances') out[k] = redactDatum(inner);
+    else if (isSecretKey(k)) out[k] = REDACTED;
+    else out[k] = inner !== null && typeof inner === 'object' ? REDACTED : inner;
+  }
+  return out;
 }
 
 /** Column ids of a `grid` whose COLUMN LABEL names PII.
@@ -145,7 +179,10 @@ export function redactTree(node: unknown, opts: RedactOptions = {}): unknown {
     // A sibling `label` naming government/financial PII poisons this object's
     // `value` (and `secondaryValue`) — the widget shape that key-matching alone
     // would sail straight past.
-    const piiSiblings = isSensitiveLabel(src.label);
+    // The label may also be a list-card row's `label` COLUMN widget, whose
+    // `.value` is the human label — then the sibling `value` /
+    // `secondaryValue` column widgets hold the datum.
+    const piiSiblings = labelIsSensitive(src.label);
     // Entering a grid: its own `columns` array defines the scope for the rows
     // beneath it — even when it names no PII columns, so an inner grid never
     // inherits an outer grid's colliding ids.
@@ -155,7 +192,7 @@ export function redactTree(node: unknown, opts: RedactOptions = {}): unknown {
       if (isSecretKey(k)) {
         out[k] = REDACTED;
       } else if (piiSiblings && (k === 'value' || k === 'secondaryValue')) {
-        out[k] = REDACTED;
+        out[k] = redactDatum(v);
       } else if (k === 'cellsMap' && columns && v !== null && typeof v === 'object') {
         const cells = v as Record<string, unknown>;
         const cleaned: Record<string, unknown> = {};

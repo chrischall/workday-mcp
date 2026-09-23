@@ -130,3 +130,37 @@ describe('redactTree PII key names: plurals and long spellings (fleet-audit#279)
     expect(redactTree({ worker: benign })).toEqual({ worker: benign });
   });
 });
+
+describe('redactTree list-card rows (fleet-audit#278)', () => {
+  // workday_fetch returns the raw envelope; a list-card row keeps its human
+  // label in the `label` COLUMN widget's `.value`, so the datum in the sibling
+  // `value` / `secondaryValue` widgets must be withheld too.
+  it('redacts the value widgets of a row whose label widget names PII', () => {
+    const out = redactTree({
+      contentSectionItems: [
+        {
+          label: { widget: 'text', label: 'Label', value: 'National ID' },
+          value: { widget: 'text', label: 'Value', value: '123-45-6789' },
+          secondaryValue: { widget: 'text', label: 'Secondary Value', value: 'AB123456C' },
+        },
+        {
+          label: { widget: 'text', label: 'Label', value: 'Medical' },
+          value: { widget: 'text', label: 'Value', value: '$120.00' },
+        },
+      ],
+    }) as any;
+    const [pii, benign] = out.contentSectionItems;
+    expect(pii.label.value).toBe('National ID');
+    expect(pii.value).toEqual({ widget: 'text', label: 'Value', value: '[redacted]' });
+    expect(pii.secondaryValue.value).toBe('[redacted]');
+    expect(benign.value.value).toBe('$120.00');
+  });
+
+  it('redacts a moniker value widget under a PII label widget', () => {
+    const out = redactTree({
+      label: { widget: 'text', value: 'Bank Account' },
+      value: { widget: 'moniker', text: '****9999 First Bank' },
+    }) as any;
+    expect(JSON.stringify(out)).not.toContain('9999');
+  });
+});
