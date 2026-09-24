@@ -20,7 +20,9 @@ every request rides the user's signed-in `*.myworkday.com` tab.
   allowlist of fields only.
 - `src/redact.ts` — the DUAL of the parser's allowlist: a denylist applied to
   raw envelopes returned by `workday_fetch` / `workday_graphql`, covering secret
-  and PII key names (GraphQL's field-keyed JSON has no labels) plus values
+  and PII key names — including identity-document collections such as
+  `driversLicenses` / `identifications` / `visas` / `customIds` (GraphQL's
+  field-keyed JSON has no labels) — plus values
   whose sibling `label` (a string, or a list-card row's `label` column
   widget) or grid column names government/financial PII. Key-name matching is
   only sound because `assertReadOnlyGraphql` refuses aliasing such a field. `getTask` runs it BEFORE `parseTask` too, because

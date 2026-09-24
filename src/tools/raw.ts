@@ -71,7 +71,7 @@ export function registerRawTools(
         '`.htmld` endpoint — notably the Inbox / "My Tasks" and global search. Workday does ' +
         'not publish these operations, so you supply the document; expect to iterate. ' +
         '`mutation` and `subscription` documents are REFUSED — this server is read-only — as are type-system (SDL) documents, whose definition boundaries cannot be tracked reliably. ' +
-        'Secret and government/financial PII fields (SSN, national ID, bank account, …) come back redacted by field name, so aliasing one of them to another name is refused.',
+        'Secret and government/financial PII fields (SSN, national ID, bank account, driving licence, visa and other identity documents, …) come back redacted by field name, so aliasing one of them to another name is refused.',
       annotations: {
         title: 'Run a Workday GraphQL query',
         readOnlyHint: true,
