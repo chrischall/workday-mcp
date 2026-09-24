@@ -63,6 +63,20 @@ export const SECRET_KEY_PATTERNS: readonly RegExp[] = [
   /routingNumbers?$/i,
   /ibans?$/i,
   /^nin$/i,
+  // Identity-document COLLECTIONS (fleet-audit#1140). Workday returns these as
+  // `driversLicenses { number }`, `identifications { idNumber }`,
+  // `visas { documentNumber }`, `customIds { idValue }` — neither the
+  // container nor the inner keys match the patterns above, and a GraphQL
+  // response has no label/column for the other rules. The container is
+  // replaced wholesale, and the datum keys are denied wherever they surface
+  // (a container Workday spells some other way). Anchored at the end so
+  // descriptors such as `visaType` stay visible.
+  /driversLicen[cs]es?$/i,
+  /identifications?$/i,
+  /visas?$/i,
+  /customIds?$/i,
+  /^(id|document)Numbers?$/i,
+  /^idValues?$/i,
 ];
 
 /** Sibling-`label` patterns that make the accompanying `value` sensitive.
