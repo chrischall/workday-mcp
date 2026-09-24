@@ -186,3 +186,55 @@ describe('redactTree list-card rows (fleet-audit#278)', () => {
     expect(out.value.instances[0]).toEqual({ widget: 'moniker', text: '[redacted]' });
   });
 });
+
+describe('redactTree identity-document collections (fleet-audit#1140)', () => {
+  // Workday exposes identity documents as collections whose container key and
+  // inner datum keys (`number`, `idNumber`, `documentNumber`, `idValue`) match
+  // none of the older PII key patterns — and a GraphQL response carries no
+  // label or grid column for the other rules to fire on.
+  it('redacts a driversLicenses { number } GraphQL response', () => {
+    const out = redactTree({
+      data: { worker: { driversLicenses: [{ number: 'D123-4567-8901', issuingCountry: 'US' }] } },
+    }) as { data: { worker: Record<string, unknown> } };
+    expect(JSON.stringify(out)).not.toContain('D123-4567-8901');
+    expect(out.data.worker.driversLicenses).toBe('[redacted]');
+  });
+
+  const containers: Array<[string, unknown]> = [
+    ['driversLicenses', [{ number: 'X-000-111' }]],
+    ['driversLicense', { number: 'X-000-111' }],
+    ['driversLicences', [{ number: 'X-000-111' }]],
+    ['identifications', [{ idNumber: 'X-000-111' }]],
+    ['identification', { idNumber: 'X-000-111' }],
+    ['visas', [{ documentNumber: 'X-000-111' }]],
+    ['visa', { documentNumber: 'X-000-111' }],
+    ['customIds', [{ idValue: 'X-000-111' }]],
+    ['customId', { idValue: 'X-000-111' }],
+  ];
+  for (const [key, value] of containers) {
+    it(`redacts the ${key} container wholesale`, () => {
+      const out = redactTree({ worker: { [key]: value } }) as {
+        worker: Record<string, unknown>;
+      };
+      expect(JSON.stringify(out)).not.toContain('X-000-111');
+      expect(out.worker[key]).toBe('[redacted]');
+    });
+  }
+
+  // The datum keys themselves, wherever they surface (e.g. under a container
+  // name Workday spells some other way).
+  for (const key of ['idNumber', 'idNumbers', 'documentNumber', 'documentNumbers', 'idValue']) {
+    it(`redacts a bare ${key}`, () => {
+      const out = redactTree({ doc: { [key]: 'X-000-111', type: 'Visa' } }) as {
+        doc: Record<string, unknown>;
+      };
+      expect(out.doc[key]).toBe('[redacted]');
+      expect(out.doc.type).toBe('Visa');
+    });
+  }
+
+  it('keeps benign look-alikes visible', () => {
+    const benign = { id: 'abc', workerId: 'W1', employeeId: 'E1', visaType: 'H-1B', number: 3 };
+    expect(redactTree({ worker: benign })).toEqual({ worker: benign });
+  });
+});

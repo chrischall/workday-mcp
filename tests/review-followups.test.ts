@@ -525,6 +525,18 @@ describe('workday_graphql PII redaction cannot be bypassed by aliases (fleet-aud
     ).toThrow(/alias/i);
   });
 
+  it('refuses an aliased identity-document collection (fleet-audit#1140)', () => {
+    expect(() =>
+      assertReadOnlyGraphql('{ worker { dl: driversLicenses { number } } }')
+    ).toThrow(/alias/i);
+    expect(() =>
+      assertReadOnlyGraphql('{ worker { ids: identifications { n: idNumber } } }')
+    ).toThrow(/alias/i);
+    expect(() => assertReadOnlyGraphql('{ worker { v: visas { documentNumber } } }')).toThrow(
+      /alias/i
+    );
+  });
+
   it('allows aliases of benign fields and colons in arguments', () => {
     expect(() =>
       assertReadOnlyGraphql('query Q($id: ID! = "x") { w: worker(id: $id, ssn: "no") { n: name } }')
