@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/chrischall/workday-mcp/compare/v1.1.2...v1.1.3) (2026-09-24)
+
+
+### Bug Fixes
+
+* **redact:** withhold driver's licence, visa and other identity-document numbers from raw reads ([#125](https://github.com/chrischall/workday-mcp/issues/125)) ([d4182d8](https://github.com/chrischall/workday-mcp/commit/d4182d8b966257adabc93e74c50055f35349dda2))
+
 ## [1.1.2](https://github.com/chrischall/workday-mcp/compare/v1.1.1...v1.1.2) (2026-09-23)
 
 
