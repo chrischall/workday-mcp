@@ -15,7 +15,7 @@ Workday employees have no personal API — the official REST/SOAP surface
 needs a tenant-admin-registered OAuth client. The only usable surface is the
 employee's own signed-in web session behind corporate SSO (Ping/Okta/Entra +
 MFA). `fpx` routes the request through the user's already-authenticated
-`*.myworkday.com` browser tab (the Transporter extension), so a `*.htmld`
+`*.myworkday.com` browser tab (the ContextMint Bridge extension), so a `*.htmld`
 data endpoint that would otherwise bounce to the IdP returns clean JSON.
 
 This is the same access the `workday_*` MCP tools use (a widget-tree JSON
@@ -27,10 +27,12 @@ parser), reached with one CLI call instead of a running server.
 ```sh
 npm install -g @fetchproxy/cli                # provides `fpx`
 fpx profile add workday --domain myworkday.com # apex domain (per-tenant subdomain e.g. wd5)
-fpx pair -p workday                            # prints a pair code → approve in Transporter
+fpx pair -p workday                            # prints a pair code → approve in ContextMint Bridge
 ```
 
-Requirements: the **Transporter** extension installed, an open tab at
+Requirements: the **ContextMint Bridge** extension installed (from
+https://github.com/nullnet-app/contextmint-bridge/releases — Chrome: load the
+chrome zip unpacked; Safari: ships inside the ContextMint app), an open tab at
 `https://<host>/<tenant>` (e.g. `https://wd5.myworkday.com/acme`) with SSO
 already completed, and the extension's Chrome **Site access** allowing
 `myworkday.com`. Pairing persists — after the first approval every later

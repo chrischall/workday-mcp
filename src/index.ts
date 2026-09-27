@@ -50,7 +50,7 @@ await runMcp({
   ],
   banner:
     `[workday-mcp] v${VERSION} — WebSocket bridge via @fetchproxy/server on 127.0.0.1:${port ?? 37149}. ` +
-    `Install the fetchproxy extension (see https://github.com/chrischall/fetchproxy), ` +
+    `Install ContextMint Bridge (see https://github.com/nullnet-app/contextmint-bridge/releases), ` +
     `sign into https://${host}, and set WORKDAY_TENANT to your tenant slug. ` +
     `This project was developed and is maintained by AI (Claude). Use at your own discretion.`,
   shutdown: { onSignal: () => client.close() },

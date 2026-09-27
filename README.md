@@ -3,7 +3,7 @@
 Read-only MCP server for [Workday](https://www.workday.com/). Reads your
 Workday org chart, worker profiles, pay, benefits, performance, and any task or
 data card, and returns them as structured JSON. Every request routes through your own signed-in
-`*.myworkday.com` tab via the [fetchproxy](https://github.com/chrischall/fetchproxy)
+`*.myworkday.com` tab via the [ContextMint Bridge](https://github.com/nullnet-app/contextmint-bridge)
 browser extension, reusing your existing SSO-authenticated session.
 
 > ⚠️ Workday gives employees no personal API. This server reads the same internal
@@ -37,7 +37,11 @@ See [SKILL.md](./skills/workday-mcp/SKILL.md) for full setup. In brief:
 }
 ```
 
-Then install the fetchproxy extension and sign into Workday in your browser.
+Then install ContextMint Bridge from its
+[releases page](https://github.com/nullnet-app/contextmint-bridge/releases)
+(Chrome: unzip the chrome zip and load it unpacked in `chrome://extensions`;
+Safari: it ships inside the ContextMint app) and sign into Workday in your
+browser.
 
 ## Tools
 
