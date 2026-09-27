@@ -40,8 +40,15 @@ See [SKILL.md](./skills/workday-mcp/SKILL.md) for full setup. In brief:
 Then install ContextMint Bridge from its
 [releases page](https://github.com/nullnet-app/contextmint-bridge/releases)
 (Chrome: unzip the chrome zip and load it unpacked in `chrome://extensions`;
-Safari: it ships inside the ContextMint app) and sign into Workday in your
-browser.
+Safari: it ships inside the ContextMint app, which has no public download link
+yet) and sign into Workday in your browser.
+
+ContextMint Bridge is the fetchproxy browser extension under its new name, from
+the same maintainer — fetchproxy's own
+[README](https://github.com/chrischall/fetchproxy#extension) points to it. Its
+source is public at <https://github.com/nullnet-app/contextmint-bridge>: build it
+yourself, or check a release zip against the `.sha256` file published beside it
+(`shasum -a 256 -c contextmint-bridge-chrome-<version>.zip.sha256`).
 
 ## Tools
 

@@ -53,7 +53,11 @@ Download it from the
 
 - **Chrome:** unzip the chrome zip and load it as an unpacked extension in
   `chrome://extensions` (Developer mode on).
-- **Safari:** it ships inside the ContextMint app.
+- **Safari:** it ships inside the ContextMint app (no public download link yet).
+
+It is the fetchproxy browser extension under its new name, same maintainer; source
+is public at https://github.com/nullnet-app/contextmint-bridge — build it yourself
+or verify a release zip with its `.sha256` (`shasum -a 256 -c <zip>.sha256`).
 
 On the first request you'll be asked to approve a pairing code in the
 extension popup (one-time, per server identity).
