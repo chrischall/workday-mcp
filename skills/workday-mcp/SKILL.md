@@ -1,6 +1,6 @@
 ---
 name: workday-mcp
-description: Read Workday HR data — your org chart and team, worker profiles, pay, benefits, compensation, performance, and any task or data card — via MCP through your own signed-in session. Triggers on phrases like "check my workday", "who reports to X", "my org chart", "look up <person> in workday", "read my workday compensation", "my workday benefits", "<person>'s performance review", "pull this workday page", or any request involving Workday people, pay, benefits, or team data. Read-only. Requires workday-mcp installed and the fetchproxy extension active (see Setup below).
+description: Read Workday HR data — your org chart and team, worker profiles, pay, benefits, compensation, performance, and any task or data card — via MCP through your own signed-in session. Triggers on phrases like "check my workday", "who reports to X", "my org chart", "look up <person> in workday", "read my workday compensation", "my workday benefits", "<person>'s performance review", "pull this workday page", or any request involving Workday people, pay, benefits, or team data. Read-only. Requires workday-mcp installed and the ContextMint Bridge extension active (see Setup below).
 ---
 
 # workday-mcp
@@ -8,7 +8,7 @@ description: Read Workday HR data — your org chart and team, worker profiles, 
 Read-only MCP server for Workday. Reads your org chart, worker profiles, pay,
 benefits, performance, and any task or data card, and returns them as structured
 JSON. Every request
-routes through your own signed-in `*.myworkday.com` tab via the fetchproxy
+routes through your own signed-in `*.myworkday.com` tab via the ContextMint Bridge
 browser extension, reusing your existing SSO-authenticated session.
 
 - **npm:** [npmjs.com/package/workday-mcp](https://www.npmjs.com/package/workday-mcp)
@@ -16,7 +16,7 @@ browser extension, reusing your existing SSO-authenticated session.
 
 > ⚠️ Workday does not give employees a personal API. This server reads the same
 > internal `*.htmld` endpoints the Workday web app calls, dispatched through your
-> own signed-in browser tab via the fetchproxy extension. It is **read-only** and
+> own signed-in browser tab via the ContextMint Bridge extension. It is **read-only** and
 > touches only your own data. Check your employer's acceptable-use policy. Use at
 > your own discretion.
 
@@ -46,18 +46,17 @@ browser extension, reusing your existing SSO-authenticated session.
 - `WORKDAY_HOST` (optional) — your data-center host; defaults to `wd5.myworkday.com`.
 - `WORKDAY_WS_PORT` (optional) — override the fetchproxy port (default 37149).
 
-### 2. Install the fetchproxy extension (one-time, shared across fetchproxy MCPs)
+### 2. Install ContextMint Bridge (one-time, shared across fetchproxy MCPs)
 
-```bash
-git clone https://github.com/chrischall/fetchproxy
-cd fetchproxy
-npm ci
-npm --workspace=@fetchproxy/extension-chrome run build
-```
+Download it from the
+[ContextMint Bridge releases](https://github.com/nullnet-app/contextmint-bridge/releases):
 
-Load `fetchproxy/packages/extension-chrome/dist` as an unpacked extension in
-`chrome://extensions`. On the first request you'll be asked to approve a pairing
-code in the extension popup (one-time, per server identity).
+- **Chrome:** unzip the chrome zip and load it as an unpacked extension in
+  `chrome://extensions` (Developer mode on).
+- **Safari:** it ships inside the ContextMint app.
+
+On the first request you'll be asked to approve a pairing code in the
+extension popup (one-time, per server identity).
 
 ### 3. Sign into Workday
 

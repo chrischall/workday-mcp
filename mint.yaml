@@ -42,7 +42,7 @@ egress:
   # Empty on purpose: this is a pure browser-bridge MCP. Every Workday
   # request (the tenant's *.htmld pages and JSON under
   # https://<WORKDAY_HOST>/<WORKDAY_TENANT>/…, default wd5.myworkday.com)
-  # is made by the user's signed-in tab via the fetchproxy extension, never
+  # is made by the user's signed-in tab via the ContextMint Bridge extension, never
   # by this process (src/transport-fetchproxy.ts is the only transport;
   # there is no direct mode and no bootstrap that dials). WORKDAY_HOST only
   # selects WHICH signed-in tab the extension routes to — it is not a host
