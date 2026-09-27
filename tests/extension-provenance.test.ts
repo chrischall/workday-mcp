@@ -27,6 +27,13 @@ describe('ContextMint Bridge install provenance', () => {
     expect(read(rel)).toContain('.sha256');
   });
 
+  // Safari is not installable yet (it ships inside the ContextMint app, which has
+  // no public download), so every surface that mentions it must steer to Chrome.
+  it.each(INSTALL_SURFACES)('%s steers Safari users to Chrome for now', (rel) => {
+    const text = read(rel);
+    if (/safari/i.test(text)) expect(text).toMatch(/use Chrome for now/i);
+  });
+
   it('README points at fetchproxy’s own README, which links the new name', () => {
     expect(read('README.md')).toContain('https://github.com/chrischall/fetchproxy#extension');
   });
