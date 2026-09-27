@@ -32,8 +32,8 @@ fpx pair -p workday                            # prints a pair code → approve 
 
 Requirements: the **ContextMint Bridge** extension installed (from
 https://github.com/nullnet-app/contextmint-bridge/releases — Chrome: load the
-chrome zip unpacked, after checking it against the `.sha256` beside it; Safari:
-ships inside the ContextMint app — it is the fetchproxy browser extension renamed,
+chrome zip unpacked, after checking it against the `.sha256` beside it; Safari is
+not available yet (it will ship inside the ContextMint app), so use Chrome for now — it is the fetchproxy browser extension renamed,
 source public at https://github.com/nullnet-app/contextmint-bridge), an open tab at
 `https://<host>/<tenant>` (e.g. `https://wd5.myworkday.com/acme`) with SSO
 already completed, and the extension's Chrome **Site access** allowing
