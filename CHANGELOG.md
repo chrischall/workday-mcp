@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.4](https://github.com/chrischall/workday-mcp/compare/v1.1.3...v1.1.4) (2026-09-27)
+
+
+### Bug Fixes
+
+* **deps:** move to [@fetchproxy](https://github.com/fetchproxy) 3.4 for ContextMint Bridge errors, capability subsets and managed pins ([#128](https://github.com/chrischall/workday-mcp/issues/128)) ([862d98a](https://github.com/chrischall/workday-mcp/commit/862d98ade3a62868749530d90b63d4ff1b6b3948))
+* **deps:** move to @chrischall/mcp-utils 2.8 and [@fetchproxy](https://github.com/fetchproxy) 3.4.1 for clearer browser-bridge errors ([#133](https://github.com/chrischall/workday-mcp/issues/133)) ([e21399c](https://github.com/chrischall/workday-mcp/commit/e21399c6bdde3047610e6c20ee4f45ed87da2dca))
+* **install:** state ContextMint Bridge provenance and checksum verification beside every install step ([#131](https://github.com/chrischall/workday-mcp/issues/131)) ([53cddcd](https://github.com/chrischall/workday-mcp/commit/53cddcdc963f8cb3c0f86376c373850991962295))
+
+
+### Documentation
+
+* **skills:** note in the workday-fpx skill that the Safari ContextMint app has no public download link ([#134](https://github.com/chrischall/workday-mcp/issues/134)) ([edc8cd9](https://github.com/chrischall/workday-mcp/commit/edc8cd931e3acfd08036bce549f735d0593d44e6))
+
 ## [1.1.3](https://github.com/chrischall/workday-mcp/compare/v1.1.2...v1.1.3) (2026-09-24)
 
 
