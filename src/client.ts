@@ -10,6 +10,8 @@
 //     non-JSON bodies all become typed, actionable errors here so tool authors
 //     never handle them.
 import {
+  detectEdgeBlock,
+  EdgeBlockedError,
   formatApiError,
   mapWithConcurrency,
   messageOf,
@@ -901,6 +903,13 @@ export class WorkdayClient {
 
   private throwIfNotOk(result: FetchResult, method: string, path: string): void {
     if (result.status >= 200 && result.status < 300) return;
+    // A CDN/WAF refusal page answers 403 like a dead session, but the request
+    // never reached Workday — name it before the 401/403 branch sends the user
+    // back through SSO.
+    const edge = detectEdgeBlock({ body: result.body, status: result.status });
+    if (edge !== null) {
+      throw new EdgeBlockedError(result.status, edge.vendor, { service: 'Workday', method, path });
+    }
     if (result.status === 401 || result.status === 403) {
       throw new SessionNotAuthenticatedError('Workday', this.host);
     }

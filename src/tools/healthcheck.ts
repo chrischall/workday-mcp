@@ -1,4 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
+import { EdgeBlockedError } from '@chrischall/mcp-utils';
 import { registerBridgeHealthcheckTool } from '@chrischall/mcp-utils/fetchproxy';
 import {
   WorkdayClient,
@@ -23,7 +24,8 @@ import {
  *     `client.tenant` inside the probe throws `WorkdayConfigError` when the
  *     tenant is unset, which `classifyThrown` turns into an actionable result
  *     (replacing the old `configured: false` early return).
- *   - `classifyThrown` maps the SSO bounce (`SessionNotAuthenticatedError`) to a
+ *   - `classifyThrown` maps a CDN/WAF refusal (`EdgeBlockedError`) to
+ *     `edge_blocked`, the SSO bounce (`SessionNotAuthenticatedError`) to a
  *     `session_expired` kind with Workday re-sign-in copy, and the deferred
  *     config error to `not_configured`.
  */
@@ -57,6 +59,18 @@ export function registerHealthcheckTools(
     classifyThrown: (err) => {
       if (err instanceof WorkdayConfigError) {
         return { kind: 'not_configured', hint: err.message };
+      }
+      // The bridge healthcheck has no edge arm of its own, so name a CDN/WAF
+      // block here — before it could read as an expired session.
+      if (err instanceof EdgeBlockedError) {
+        return {
+          kind: 'edge_blocked',
+          detail: { vendor: err.vendor },
+          hint:
+            `${client.host} refused the request at its CDN/WAF (${err.vendor}) before it reached Workday, ` +
+            'so your session was never checked — signing in again will not help. Retry later, or from a ' +
+            'different network.',
+        };
       }
       if (err instanceof SessionNotAuthenticatedError) {
         return {
