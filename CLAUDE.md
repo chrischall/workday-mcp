@@ -54,11 +54,15 @@ See `docs/WORKDAY-API.md` for the captured endpoint shapes and the widget schema
   hand-bump — release-please owns it. `extra-files` in `release-please-config.json`
   must list every version-bearing manifest.
 - Never commit secrets or captured tokens/cookies/values. `.env` is gitignored.
-- Don't merge PRs or add `ready-to-merge` yourself; `pr-auto-review` +
-  `auto-merge` ship it.
 
+<!-- pr-workflow:v3 -->
 ## Pull requests & release notes
 
-Apply exactly one release-notes label per PR (`enhancement` → Features, `bug` → Bug Fixes, `dependencies` → Dependencies, etc.), and give the PR a Conventional-Commit title — release-please parses the squash subject to pick the version bump and changelog section.
+Fleet policy — Conventional-Commit PR titles, labels, the auto-review /
+auto-merge ladder, auto-review follow-up issues, PR timing, and release PRs —
+lives in `~/.claude/CLAUDE.md`. Don't restate it here; the copies drifted.
 
-**Exception for first-party dependency bumps.** When bumping a package we own (`@chrischall/mcp-utils`, `@chrischall/realty-core`, `@fetchproxy/server` — anything published from a chrischall-owned repo), label the PR `enhancement` or `bug` instead of `dependencies`, and use the matching Conventional-Commit prefix (`feat:` or `fix:`) instead of `chore:`/`build(deps):`. Those bumps deliver real product fixes or features through us, so they should drive a release-please version bump and show up under Features/Bug Fixes in the release notes — not get hidden under "Dependencies" (which doesn't trigger a release).
+Shared technical conventions (publishing, bundling, versioning guards,
+write-verification, transport archetypes, testing traps) live in
+[`chrischall/workflows`](https://github.com/chrischall/workflows):
+`docs/fleet-conventions.md`, plus `README.md` for the CI pipeline contract.
