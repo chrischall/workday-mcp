@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.5](https://github.com/chrischall/workday-mcp/compare/v1.1.4...v1.1.5) (2026-10-03)
+
+
+### Bug Fixes
+
+* **deps:** bump @chrischall/mcp-utils to 2.12.0 ([#141](https://github.com/chrischall/workday-mcp/issues/141)) ([9757a79](https://github.com/chrischall/workday-mcp/commit/9757a797219b016f5a54575c13e1f062953558b8))
+* **deps:** bump @chrischall/mcp-utils to 2.13.0 ([#143](https://github.com/chrischall/workday-mcp/issues/143)) ([3cd6fe7](https://github.com/chrischall/workday-mcp/commit/3cd6fe737b10632287fe648d41f1c4248cd6f476))
+* **deps:** Bump the production-dependencies group with 2 updates ([#137](https://github.com/chrischall/workday-mcp/issues/137)) ([f540d8c](https://github.com/chrischall/workday-mcp/commit/f540d8ca98d40fd85c6737e7c0642c2bdbfb2af8))
+* keep credentials and report edge_blocked on CDN/WAF blocks (mcp-utils 2.10.0) ([#140](https://github.com/chrischall/workday-mcp/issues/140)) ([3682f06](https://github.com/chrischall/workday-mcp/commit/3682f06dc6d3c69bd48a3f57f53da08c6fde0723))
+* report CDN/WAF blocks as edge_blocked, not a rejected credential (mcp-utils 2.9.0) ([#139](https://github.com/chrischall/workday-mcp/issues/139)) ([6cb4792](https://github.com/chrischall/workday-mcp/commit/6cb47923e6d71f84275e8e474d7ca4ddc3a8df78))
+
+
+### Documentation
+
+* replace restated PR policy with the fleet-policy pointer ([#142](https://github.com/chrischall/workday-mcp/issues/142)) ([838138f](https://github.com/chrischall/workday-mcp/commit/838138f645cd6215530fa2c02d96efd4439c8697))
+
 ## [1.1.4](https://github.com/chrischall/workday-mcp/compare/v1.1.3...v1.1.4) (2026-09-27)
 
 
