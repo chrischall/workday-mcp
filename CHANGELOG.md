@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.6](https://github.com/chrischall/workday-mcp/compare/v1.1.5...v1.1.6) (2026-10-05)
+
+
+### Bug Fixes
+
+* **deps:** require @chrischall/mcp-utils 2.14.0 and MCP SDK 2.3.0 ([#144](https://github.com/chrischall/workday-mcp/issues/144)) ([d011280](https://github.com/chrischall/workday-mcp/commit/d011280397465e8f7c22f834fa98307977be0fa6))
+
 ## [1.1.5](https://github.com/chrischall/workday-mcp/compare/v1.1.4...v1.1.5) (2026-10-03)
 
 
