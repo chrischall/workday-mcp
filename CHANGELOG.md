@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.7](https://github.com/chrischall/workday-mcp/compare/v1.1.6...v1.1.7) (2026-10-07)
+
+
+### Bug Fixes
+
+* **deps:** pick up mcp-utils 2.15.0 elicitation opt-out and fetchproxy 3.6.0 relay frame fixes ([#146](https://github.com/chrischall/workday-mcp/issues/146)) ([326d8f5](https://github.com/chrischall/workday-mcp/commit/326d8f58aa1c3b6b4bb5377474d7db2c1ed07307))
+
 ## [1.1.6](https://github.com/chrischall/workday-mcp/compare/v1.1.5...v1.1.6) (2026-10-05)
 
 
