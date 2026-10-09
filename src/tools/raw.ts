@@ -1,8 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
-import { minifiedResult } from '../mcp.js';
 import { capPayload } from '../redact.js';
+import { untrustedDescription, untrustedResponse } from '../view.js';
 
 /** Default cap on a raw payload. Workday envelopes routinely exceed 100 KB. */
 const DEFAULT_MAX_BYTES = 60_000;
@@ -24,12 +24,13 @@ export function registerRawTools(
     'workday_fetch',
     {
       title: 'Fetch a raw Workday endpoint',
-      description:
+      description: untrustedDescription(
         'GET any Workday data endpoint and return the RAW JSON with secrets redacted — the ' +
         'escape hatch for pages the typed tools do not model yet. Prefer `workday_get_task` ' +
         '(structured) when it works; reach for this to explore an unfamiliar page or to see ' +
         'fields the parser drops. Bare uris get `.htmld` appended and `/d/` SPA paths are ' +
-        'normalized. Read-only (GET only).',
+        'normalized. Read-only (GET only).'
+      ),
       annotations: {
         title: 'Fetch a raw Workday endpoint',
         readOnlyHint: true,
@@ -57,7 +58,7 @@ export function registerRawTools(
     async ({ path, maxBytes }) => {
       const raw = await client.fetchRawJson(path);
       const capped = capPayload(raw, maxBytes ?? DEFAULT_MAX_BYTES);
-      return minifiedResult(capped.data);
+      return untrustedResponse(capped.data);
     }
   );
 
@@ -65,13 +66,14 @@ export function registerRawTools(
     'workday_graphql',
     {
       title: 'Run a Workday GraphQL query',
-      description:
+      description: untrustedDescription(
         "Run a read-only GraphQL query against Workday's PEX surface " +
         '(`/wday/pex/graphql`). This is the only route to surfaces that have no GET-able ' +
         '`.htmld` endpoint — notably the Inbox / "My Tasks" and global search. Workday does ' +
         'not publish these operations, so you supply the document; expect to iterate. ' +
         '`mutation` and `subscription` documents are REFUSED — this server is read-only — as are type-system (SDL) documents, whose definition boundaries cannot be tracked reliably. ' +
-        'Secret and government/financial PII fields (SSN, national ID, bank account, driving licence, visa and other identity documents, …) come back redacted by field name, so aliasing one of them to another name is refused.',
+        'Secret and government/financial PII fields (SSN, national ID, bank account, driving licence, visa and other identity documents, …) come back redacted by field name, so aliasing one of them to another name is refused.'
+      ),
       annotations: {
         title: 'Run a Workday GraphQL query',
         readOnlyHint: true,
@@ -107,7 +109,7 @@ export function registerRawTools(
     async ({ query, variables, operationName, maxBytes }) => {
       const out = await client.graphql(query, variables ?? {}, operationName);
       const capped = capPayload(out, maxBytes ?? DEFAULT_MAX_BYTES);
-      return minifiedResult(capped.data);
+      return untrustedResponse(capped.data);
     }
   );
 }
