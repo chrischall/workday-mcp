@@ -33,6 +33,12 @@
           "description": "Override the fetchproxy WebSocket port (default 37149).",
           "isRequired": false,
           "format": "string"
+        },
+        {
+          "name": "WORKDAY_DEBUG",
+          "description": "Set to 1 to log verbose request detail to stderr.",
+          "isRequired": false,
+          "format": "string"
         }
       ]
     }

@@ -33,7 +33,9 @@
       ],
       "env": {
         "WORKDAY_TENANT": "${user_config.tenant}",
-        "WORKDAY_HOST": "${user_config.host}"
+        "WORKDAY_HOST": "${user_config.host}",
+        "WORKDAY_WS_PORT": "${user_config.ws_port}",
+        "WORKDAY_DEBUG": "${user_config.debug}"
       }
     }
   },
@@ -50,6 +52,18 @@
       "description": "Your Workday data-center host. Defaults to wd5.myworkday.com.",
       "required": false,
       "default": "wd5.myworkday.com"
+    },
+    "ws_port": {
+      "type": "string",
+      "title": "fetchproxy port",
+      "description": "Override the fetchproxy WebSocket port (default 37149).",
+      "required": false
+    },
+    "debug": {
+      "type": "string",
+      "title": "Debug logging",
+      "description": "Set to 1 to log verbose request detail to stderr.",
+      "required": false
     }
   },
   "tools": [
