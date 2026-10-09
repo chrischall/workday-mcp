@@ -67,6 +67,19 @@ describe('WorkdayClient deferred config', () => {
     expect(() => client.tenant).toThrow(WorkdayConfigError);
     return expect(client.getTask('/x')).rejects.toThrow(WorkdayConfigError);
   });
+
+  it('treats an unexpanded .mcpb placeholder as unset, with the actionable message', () => {
+    process.env.WORKDAY_TENANT = '${user_config.tenant}';
+    const client = new WorkdayClient({ transport: new FakeTransport(), host: 'wd5.myworkday.com' });
+    expect(() => client.tenant).toThrow(WorkdayConfigError);
+    expect(() => client.tenant).toThrow(/WORKDAY_TENANT is not set.*tenant slug/);
+  });
+
+  it('reads the tenant from WORKDAY_TENANT when no option is passed', () => {
+    process.env.WORKDAY_TENANT = '  acme  ';
+    const client = new WorkdayClient({ transport: new FakeTransport(), host: 'wd5.myworkday.com' });
+    expect(client.tenant).toBe('acme');
+  });
 });
 
 describe('WorkdayClient.resolvePath', () => {

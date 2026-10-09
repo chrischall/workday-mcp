@@ -16,6 +16,7 @@ import {
   mapWithConcurrency,
   messageOf,
   readEnvVar,
+  requireEnvVar,
   SessionNotAuthenticatedError,
 } from '@chrischall/mcp-utils';
 import type {
@@ -464,7 +465,17 @@ export class WorkdayClient {
   constructor(opts: WorkdayClientOptions) {
     this.transport = opts.transport;
     this.host = normalizeHost(opts.host ?? readEnvVar('WORKDAY_HOST'));
-    const tenant = opts.tenant ?? readEnvVar('WORKDAY_TENANT');
+    // Required for every data call, so read with requireEnvVar — but caught,
+    // not thrown: the server must still boot for the install-time tools/list
+    // probe, and the actionable message below surfaces on first use instead.
+    let tenant = opts.tenant;
+    if (tenant === undefined) {
+      try {
+        tenant = requireEnvVar('WORKDAY_TENANT');
+      } catch {
+        tenant = undefined;
+      }
+    }
     if (opts.configError) {
       this.configError = opts.configError;
     } else if (!tenant) {
