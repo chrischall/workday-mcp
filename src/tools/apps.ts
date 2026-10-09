@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
 import { minifiedResult } from '../mcp.js';
-import { viewArg, viewResponse } from '../view.js';
+import { untrustedDescription, viewArg, viewResponse } from '../view.js';
 
 /**
  * List the user's Workday apps (Personal Information, Benefits and Pay,
@@ -41,13 +41,14 @@ export function registerAppsTools(
     'workday_open_app',
     {
       title: 'Open a Workday app by name',
-      description:
+      description: untrustedDescription(
         'Open one of your Workday apps by name — "My Team Management", "Talent and Performance", ' +
         '"Time", "Absence", "Benefits and Pay", "Org Chart", "Total Rewards" — and read it, ' +
         'following the app down to the child cards that hold its real content. Most Workday app ' +
         'hubs return a near-empty shell on their own; this follows the links for you. ' +
         'Matched case-insensitively against your own app menu, so it works without knowing any ' +
-        'task ids. Read-only.',
+        'task ids. Read-only.'
+      ),
       annotations: {
         title: 'Open a Workday app by name',
         readOnlyHint: true,

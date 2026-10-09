@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
-import { viewArg, viewResponse } from '../view.js';
+import { untrustedDescription, viewArg, viewResponse } from '../view.js';
 
 /**
  * The read workhorse: fetch any Workday `*.htmld` data endpoint through the
@@ -24,14 +24,15 @@ export function registerTaskTools(
     'workday_get_task',
     {
       title: 'Read a Workday task / data card',
-      description:
+      description: untrustedDescription(
         'Fetch a Workday page (task or data card) by its path and return a structured, ' +
         'read-only view: title, current user, each section as label/value fields, navigable ' +
         "references (instance id + drill-in uri), and the page's related tasks + export links. " +
         "The path is a Workday `*.htmld` endpoint — take it from a prior result's `references[].uri` " +
         'or `relatedTasks[].uri`, or paste the URL of a Workday page you have open (SPA `/d/...` URLs ' +
         'are normalized automatically). Every request rides your signed-in Workday tab. Read-only; ' +
-        'no data is mutated.',
+        'no data is mutated.'
+      ),
       annotations: {
         title: 'Read a Workday task / data card',
         readOnlyHint: true,

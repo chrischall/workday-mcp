@@ -2,7 +2,12 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
 import { minifiedResult } from '../mcp.js';
-import { viewArg, viewResponse } from '../view.js';
+import {
+  untrustedDescription,
+  untrustedResponse,
+  viewArg,
+  viewResponse,
+} from '../view.js';
 
 /**
  * The people surface — what a manager reaches for.
@@ -51,13 +56,14 @@ export function registerPeopleTools(
     'workday_get_worker',
     {
       title: 'Read a worker profile',
-      description:
+      description: untrustedDescription(
         "Read a worker's Workday profile and return the CATALOG of everything readable about " +
         'them: sections (Job, Compensation, Benefits, Contact, Personal, Performance, Career, ' +
         'Feedback) each listing named, fetchable tasks. Pass a `profileUri` from ' +
         '`workday_get_org_chart` or any reference, or a bare worker id like `247$42`. ' +
         'Then use `workday_get_worker_task` to open one by name. Shows only what your own ' +
-        'Workday permissions already allow. Read-only.',
+        'Workday permissions already allow. Read-only.'
+      ),
       annotations: {
         title: 'Read a worker profile',
         readOnlyHint: true,
@@ -76,7 +82,7 @@ export function registerPeopleTools(
     },
     async ({ worker }) => {
       const page = await client.getWorker(worker);
-      return minifiedResult({
+      return untrustedResponse({
         title: page.title,
         sections: page.profile?.sections ?? [],
         fields: page.sections,
@@ -89,11 +95,12 @@ export function registerPeopleTools(
     'workday_get_worker_task',
     {
       title: 'Open one task on a worker profile',
-      description:
+      description: untrustedDescription(
         'Open a single named item from a worker\'s profile — "Compensation", "Job Details", ' +
         '"Performance Reviews", "Management Chain", "Benefits", "Goals", "Pay Change History", ' +
         "and so on. Matched case-insensitively against that worker's own task catalog; if it " +
-        'does not match, the error lists exactly what is available. Read-only.',
+        'does not match, the error lists exactly what is available. Read-only.'
+      ),
       annotations: {
         title: 'Open one task on a worker profile',
         readOnlyHint: true,
@@ -124,9 +131,10 @@ export function registerPeopleTools(
     'workday_get_my_profile',
     {
       title: 'Read your own Workday profile',
-      description:
+      description: untrustedDescription(
         'Read your own worker profile — the same catalog `workday_get_worker` returns, for ' +
-        'yourself. Use it to find your pay, benefits, time off, goals, and feedback. Read-only.',
+        'yourself. Use it to find your pay, benefits, time off, goals, and feedback. Read-only.'
+      ),
       annotations: {
         title: 'Read your own Workday profile',
         readOnlyHint: true,
@@ -137,7 +145,7 @@ export function registerPeopleTools(
     },
     async () => {
       const page = await client.getMyProfile();
-      return minifiedResult({
+      return untrustedResponse({
         title: page.title,
         sections: page.profile?.sections ?? [],
         fields: page.sections,
