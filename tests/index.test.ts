@@ -57,3 +57,22 @@ describe('tool registration', () => {
     ]);
   });
 });
+
+describe('manifest.json tool list', () => {
+  const client = new WorkdayClient({ transport: new StubTransport(), tenant: 'acme' });
+
+  it('advertises exactly the tools the server registers', async () => {
+    const { readFileSync } = await import('node:fs');
+    const manifest = JSON.parse(
+      readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')
+    ) as { tools: Array<{ name: string; description?: string }> };
+    const { server, names } = fakeServer();
+    registerHealthcheckTools(server, client);
+    registerAppsTools(server, client);
+    registerTaskTools(server, client);
+    registerPeopleTools(server, client);
+    registerRawTools(server, client);
+    expect(manifest.tools.map((t) => t.name).sort()).toEqual([...names].sort());
+    for (const t of manifest.tools) expect(t.description, t.name).toBeTruthy();
+  });
+});
