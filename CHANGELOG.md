@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.8](https://github.com/chrischall/workday-mcp/compare/v1.1.7...v1.1.8) (2026-10-09)
+
+
+### Bug Fixes
+
+* annotate tools truthfully and sync manifests with the served tools ([#155](https://github.com/chrischall/workday-mcp/issues/155)) ([f7892f6](https://github.com/chrischall/workday-mcp/commit/f7892f67430231d138b8a98f68c0734f5cf806d2))
+* declare the plugin MCP config under the mcpServers key Claude Code reads ([#156](https://github.com/chrischall/workday-mcp/issues/156)) ([e231903](https://github.com/chrischall/workday-mcp/commit/e2319035ffa6da856d8aab75f51f9e2c8187fa73))
+* **deps:** Bump @modelcontextprotocol/server ([#152](https://github.com/chrischall/workday-mcp/issues/152)) ([2532c24](https://github.com/chrischall/workday-mcp/commit/2532c247f8dc4df2b9c67720e10b08a3650bfecc))
+* **deps:** update @chrischall/mcp-utils to 3.0.0 ([#154](https://github.com/chrischall/workday-mcp/issues/154)) ([2aa6459](https://github.com/chrischall/workday-mcp/commit/2aa64593bb8c2ba1deaf0a6c4cb2e11682884a85))
+* resolve low-severity audit findings ([#148](https://github.com/chrischall/workday-mcp/issues/148)) ([dde6ec5](https://github.com/chrischall/workday-mcp/commit/dde6ec5746560e57d30b293f674ec5bdd12649e6))
+* **security:** mark third-party Workday text as untrusted in read results ([#153](https://github.com/chrischall/workday-mcp/issues/153)) ([b3b1bf7](https://github.com/chrischall/workday-mcp/commit/b3b1bf79f9cce72a842692c49feaf8afbdc4ffc8))
+
 ## [1.1.7](https://github.com/chrischall/workday-mcp/compare/v1.1.6...v1.1.7) (2026-10-07)
 
 
