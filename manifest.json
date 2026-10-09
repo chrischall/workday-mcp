@@ -54,16 +54,44 @@
   },
   "tools": [
     {
+      "name": "workday_healthcheck",
+      "description": "Verify the fetchproxy bridge + Workday session end-to-end"
+    },
+    {
       "name": "workday_get_apps",
       "description": "List your Workday apps with a launchable task id — the discovery entry point"
+    },
+    {
+      "name": "workday_open_app",
+      "description": "Open one of your Workday apps by name and read it, following the hub down to its child cards"
     },
     {
       "name": "workday_get_task",
       "description": "Read a Workday task or data card by path or task id — title, fields, references"
     },
     {
-      "name": "workday_healthcheck",
-      "description": "Verify the fetchproxy bridge + Workday session end-to-end"
+      "name": "workday_get_org_chart",
+      "description": "Read the reporting chain around you — titles, locations, and profile links"
+    },
+    {
+      "name": "workday_get_worker",
+      "description": "Read a worker profile's catalog of readable sections and tasks, within your own Workday permissions"
+    },
+    {
+      "name": "workday_get_worker_task",
+      "description": "Open one named item on a worker profile, such as Compensation or Job Details"
+    },
+    {
+      "name": "workday_get_my_profile",
+      "description": "Read your own worker profile catalog — pay, benefits, time off, goals, feedback"
+    },
+    {
+      "name": "workday_fetch",
+      "description": "GET any Workday data endpoint and return its raw JSON with secrets redacted (read-only escape hatch)"
+    },
+    {
+      "name": "workday_graphql",
+      "description": "Run a read-only GraphQL query against Workday's PEX surface, with secret/PII fields redacted"
     }
   ]
 }

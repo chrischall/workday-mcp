@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { redactTree, SENSITIVE_VALUE_LABELS } from '../src/redact.js';
+import { redactTree, SENSITIVE_VALUE_LABELS, capPayload } from '../src/redact.js';
 
 describe('redactTree', () => {
   it('drops envelope secrets by key name', () => {
@@ -236,5 +236,32 @@ describe('redactTree identity-document collections (fleet-audit#1140)', () => {
   it('keeps benign look-alikes visible', () => {
     const benign = { id: 'abc', workerId: 'W1', employeeId: 'E1', visaType: 'H-1B', number: 3 };
     expect(redactTree({ worker: benign })).toEqual({ worker: benign });
+  });
+});
+
+describe('capPayload', () => {
+  it('passes a payload under the cap through untouched', () => {
+    const out = capPayload({ a: 1 }, 100);
+    expect(out).toEqual({ data: { a: 1 }, truncated: false, bytes: 7 });
+  });
+
+  it('caps the preview in UTF-8 BYTES, not UTF-16 code units', () => {
+    // 'é' is 2 bytes, '日' is 3 bytes in UTF-8 — a char-count slice would
+    // return up to 3x the stated byte cap.
+    const data = { name: '日本語'.repeat(200) };
+    const out = capPayload(data, 100);
+    const preview = (out.data as { preview: string }).preview;
+    expect(out.truncated).toBe(true);
+    expect(Buffer.byteLength(preview, 'utf8')).toBeLessThanOrEqual(100);
+  });
+
+  it('never splits a multi-byte character or surrogate pair', () => {
+    const data = { emoji: '😀'.repeat(100) };
+    for (let cap = 20; cap < 40; cap++) {
+      const preview = (capPayload(data, cap).data as { preview: string }).preview;
+      expect(preview).not.toMatch(/�/);
+      expect(preview).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+      expect(Buffer.byteLength(preview, 'utf8')).toBeLessThanOrEqual(cap);
+    }
   });
 });

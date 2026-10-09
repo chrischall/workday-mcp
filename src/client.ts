@@ -53,11 +53,51 @@ export class WorkdayConfigError extends Error {
   }
 }
 
+/**
+ * Reduce a user-entered `WORKDAY_HOST` to a bare lowercase hostname.
+ *
+ * The value comes verbatim from env / the `.mcpb` install form, and natural
+ * entries — `https://wd5.myworkday.com`, a copied address-bar URL with a path,
+ * `WD5.myworkday.com`, a trailing slash — would otherwise break every call:
+ * the scheme lands in the bridge subdomain, and the case/slash mismatch makes
+ * the off-host check report every good response as an expired SSO session.
+ * Blank or unset falls back to the default data-center host.
+ */
+export function normalizeHost(raw: string | undefined): string {
+  let s = (raw ?? '').trim();
+  if (!s) return DEFAULT_HOST;
+  s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+  s = s.split(/[/?#]/, 1)[0].replace(/\.+$/, '').toLowerCase();
+  return s || DEFAULT_HOST;
+}
+
+/**
+ * Parse `WORKDAY_WS_PORT`. Unset/blank → `undefined` (the bridge default);
+ * anything but an integer in 1–65535 throws {@link WorkdayConfigError}, which
+ * the entrypoint hands to the client so it surfaces on the deferred-config
+ * path instead of reaching the transport as `NaN`.
+ */
+export function parsePort(raw: string | undefined): number | undefined {
+  const s = (raw ?? '').trim();
+  if (!s) return undefined;
+  const n = /^\d+$/.test(s) ? Number(s) : NaN;
+  if (!Number.isInteger(n) || n < 1 || n > 65_535) {
+    throw new WorkdayConfigError(
+      `WORKDAY_WS_PORT is set to "${s}", which is not a valid port. Set it to an integer ` +
+        'between 1 and 65535, or unset it to use the default bridge port 37149.'
+    );
+  }
+  return n;
+}
+
 export interface WorkdayClientOptions {
   transport: WorkdayTransport;
   /** Overrides for env config — primarily for tests. */
   tenant?: string;
   host?: string;
+  /** A config error found by the entrypoint (e.g. an invalid
+   *  `WORKDAY_WS_PORT`), surfaced on first use like a missing tenant. */
+  configError?: WorkdayConfigError;
 }
 
 export interface CrawlOptions {
@@ -423,9 +463,11 @@ export class WorkdayClient {
 
   constructor(opts: WorkdayClientOptions) {
     this.transport = opts.transport;
-    this.host = opts.host ?? readEnvVar('WORKDAY_HOST') ?? DEFAULT_HOST;
+    this.host = normalizeHost(opts.host ?? readEnvVar('WORKDAY_HOST'));
     const tenant = opts.tenant ?? readEnvVar('WORKDAY_TENANT');
-    if (!tenant) {
+    if (opts.configError) {
+      this.configError = opts.configError;
+    } else if (!tenant) {
       this.configError = new WorkdayConfigError(
         'WORKDAY_TENANT is not set. Set it to your Workday tenant slug — the path segment ' +
           'after the host, e.g. for https://wd5.myworkday.com/acme it is `acme`. ' +
