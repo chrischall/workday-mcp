@@ -15,7 +15,12 @@
 //   3. runMcp registers tools, prints the stderr banner, wires SIGINT/SIGTERM
 //      → client.close(), and connects stdio.
 import { runMcp, readEnvVar } from '@chrischall/mcp-utils';
-import { WorkdayClient } from './client.js';
+import {
+  WorkdayClient,
+  WorkdayConfigError,
+  normalizeHost,
+  parsePort,
+} from './client.js';
 import { FetchproxyTransport } from './transport-fetchproxy.js';
 import { registerHealthcheckTools } from './tools/healthcheck.js';
 import { registerTaskTools } from './tools/task.js';
@@ -24,15 +29,22 @@ import { registerPeopleTools } from './tools/people.js';
 import { registerRawTools } from './tools/raw.js';
 import { VERSION } from './version.js';
 
-const DEFAULT_HOST = 'wd5.myworkday.com';
-
-const host = readEnvVar('WORKDAY_HOST') ?? DEFAULT_HOST;
-const portRaw = readEnvVar('WORKDAY_WS_PORT');
-const port = portRaw ? Number(portRaw) : undefined;
+// Normalized once and shared with the client, so the bridge subdomain and the
+// client's off-host sign-out check agree on the same bare hostname.
+const host = normalizeHost(readEnvVar('WORKDAY_HOST'));
+// An invalid port must not crash boot or reach the transport as NaN: fall back
+// to the default bridge port and surface the error on the first tool call.
+let port: number | undefined;
+let configError: WorkdayConfigError | undefined;
+try {
+  port = parsePort(readEnvVar('WORKDAY_WS_PORT'));
+} catch (e) {
+  configError = e as WorkdayConfigError;
+}
 
 const transport = new FetchproxyTransport({ port, host, version: VERSION });
 
-const client = new WorkdayClient({ transport });
+const client = new WorkdayClient({ transport, host, configError });
 // Bring the bridge up before runMcp connects stdio (deferred-config-error
 // pattern — a bridge failure surfaces here, before any tool call).
 await client.start();

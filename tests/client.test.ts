@@ -4,6 +4,8 @@ import {
   WorkdayConfigError,
   SessionNotAuthenticatedError,
   stripJsonGuard,
+  normalizeHost,
+  parsePort,
 } from '../src/client.js';
 import type {
   FetchInit,
@@ -402,5 +404,58 @@ describe('WorkdayClient.getTask PII redaction (fleet-audit#278)', () => {
       Country: 'United States',
       'National ID': '[redacted]',
     });
+  });
+});
+
+describe('normalizeHost', () => {
+  it('reduces common mis-entries to a bare lowercase hostname', () => {
+    expect(normalizeHost('wd5.myworkday.com')).toBe('wd5.myworkday.com');
+    expect(normalizeHost('https://wd5.myworkday.com')).toBe('wd5.myworkday.com');
+    expect(normalizeHost('https://wd5.myworkday.com/acme/d/home.htmld')).toBe('wd5.myworkday.com');
+    expect(normalizeHost('WD5.MyWorkday.com')).toBe('wd5.myworkday.com');
+    expect(normalizeHost('  wd5.myworkday.com/  ')).toBe('wd5.myworkday.com');
+    expect(normalizeHost('wd5.myworkday.com.')).toBe('wd5.myworkday.com');
+  });
+
+  it('falls back to the default host when unset or blank', () => {
+    expect(normalizeHost(undefined)).toBe('wd5.myworkday.com');
+    expect(normalizeHost('   ')).toBe('wd5.myworkday.com');
+  });
+});
+
+describe('parsePort', () => {
+  it('accepts an unset port and a valid integer port', () => {
+    expect(parsePort(undefined)).toBeUndefined();
+    expect(parsePort('')).toBeUndefined();
+    expect(parsePort('41777')).toBe(41777);
+    expect(parsePort(' 37149 ')).toBe(37149);
+  });
+
+  it('rejects a non-integer or out-of-range port with a WorkdayConfigError', () => {
+    for (const bad of ['abc', '37149.5', '0', '70000', '-1', '1e4']) {
+      expect(() => parsePort(bad), bad).toThrow(WorkdayConfigError);
+    }
+    expect(() => parsePort('abc')).toThrow(/WORKDAY_WS_PORT/);
+  });
+});
+
+describe('WorkdayClient host normalization', () => {
+  it('does not report an expired session when WORKDAY_HOST was entered as a URL', async () => {
+    const { client, transport } = makeClient({ host: 'https://WD5.myworkday.com/' });
+    expect(client.host).toBe('wd5.myworkday.com');
+    transport.next = { status: 200, body: '{"a":1}', url: 'https://wd5.myworkday.com/acme/x.htmld' };
+    await expect(client.fetchJson('/acme/x.htmld')).resolves.toEqual({ a: 1 });
+  });
+
+  it('surfaces an injected config error (bad port) on the deferred-config path', async () => {
+    const transport = new FakeTransport();
+    const client = new WorkdayClient({
+      transport,
+      tenant: 'acme',
+      configError: new WorkdayConfigError('WORKDAY_WS_PORT is not a valid port'),
+    });
+    expect(() => client.tenant).toThrow(/WORKDAY_WS_PORT/);
+    expect(client.configErrorMessage).toMatch(/WORKDAY_WS_PORT/);
+    await expect(client.getTask('/x')).rejects.toThrow(WorkdayConfigError);
   });
 });
