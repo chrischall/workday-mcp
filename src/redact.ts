@@ -244,6 +244,19 @@ export function redactTree(node: unknown, opts: RedactOptions = {}): unknown {
   return walk(node, 0, new Set());
 }
 
+/** The longest prefix of `s` that fits in `maxBytes` UTF-8 bytes, cut on a
+ *  character boundary — never mid-sequence, so no surrogate pair is split and
+ *  no U+FFFD replacement character appears. */
+function utf8Prefix(s: string, maxBytes: number): string {
+  const buf = Buffer.from(s, 'utf8');
+  if (buf.length <= maxBytes) return s;
+  let end = maxBytes;
+  // Back off past continuation bytes (10xxxxxx) so the cut lands on the lead
+  // byte of the character that would straddle the cap.
+  while (end > 0 && (buf[end] & 0xc0) === 0x80) end--;
+  return buf.subarray(0, end).toString('utf8');
+}
+
 /**
  * Serialize `data` for a tool result, capping the payload. Raw Workday
  * envelopes routinely exceed 100 KB — far past what is useful in a model's
@@ -263,10 +276,11 @@ export function capPayload(
       bytes,
       maxBytes,
       note:
-        `Response is ${bytes} bytes, over the ${maxBytes}-byte cap. Showing the first ` +
-        `${maxBytes} bytes of its JSON. Narrow the request (a specific card path) or raise ` +
-        `maxBytes if you truly need the whole envelope.`,
-      preview: json.slice(0, maxBytes),
+        `Response is ${bytes} bytes, over the ${maxBytes}-byte cap. \`preview\` holds at most ` +
+        `the first ${maxBytes} bytes of its JSON, cut mid-document (so it will not parse). ` +
+        `Narrow the request (a specific card path) or raise maxBytes if you truly need the ` +
+        `whole envelope.`,
+      preview: utf8Prefix(json, maxBytes),
     },
     truncated: true,
     bytes,
