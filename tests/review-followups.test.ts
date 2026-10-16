@@ -432,7 +432,7 @@ describe('read-only guard, round 4 (review: trailing lookahead was also a whitel
 
   it('ALLOWS an operation or fragment merely NAMED mutation', () => {
     expect(() => assertReadOnlyGraphql('query mutation { f }')).not.toThrow();
-    expect(() => assertReadOnlyGraphql('fragment Mutation on T { a }')).not.toThrow();
+    expect(() => assertReadOnlyGraphql('fragment Mutation on T { a } query Q { ...Mutation }')).not.toThrow();
     // NB: `type Mutation { … }` was allowed until SDL documents were refused
     // wholesale — see the SDL suite below for why that changed.
   });
@@ -552,5 +552,27 @@ describe('workday_graphql PII redaction cannot be bypassed by aliases (fleet-aud
       client.graphql('query { worker { a: nationalIdentifier } }', {})
     ).rejects.toThrow(/alias/i);
     expect(transport.calls.filter((c) => c.path.includes('graphql'))).toEqual([]);
+  });
+});
+
+// fleet-audit#1351: the operation-kind check now rides mcp-utils'
+// isReadOnlyGraphqlDocument/graphqlOperationKinds, which also fail closed on
+// a document they cannot parse — the hand-rolled scanner passed those through.
+describe('assertReadOnlyGraphql on the shared operation-kind check', () => {
+  it('refuses a document with unbalanced braces rather than guess', () => {
+    expect(() => assertReadOnlyGraphql('query Q { f')).toThrow(/could not verify/i);
+  });
+
+  it('refuses a fragment-only document (nothing in it would execute)', () => {
+    expect(() => assertReadOnlyGraphql('fragment F on T { a }')).toThrow(/could not verify/i);
+  });
+
+  it('refuses an empty or comment-only document', () => {
+    expect(() => assertReadOnlyGraphql('')).toThrow(/could not verify/i);
+    expect(() => assertReadOnlyGraphql('# just a comment')).toThrow(/could not verify/i);
+  });
+
+  it('still names the write keyword, case-insensitively, as before', () => {
+    expect(() => assertReadOnlyGraphql('Mutation M { x }')).toThrow(/read-only.*`mutation`/i);
   });
 });
