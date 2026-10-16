@@ -23,4 +23,19 @@ describe('.claude-plugin/plugin.json', () => {
   it('points mcpServers at a file that exists', () => {
     expect(existsSync(join(ROOT, plugin.mcpServers as string))).toBe(true);
   });
+
+  // A git-source plugin install never builds the repo, so dist/ is absent
+  // (fleet-audit#1195): the plugin launches the published package instead.
+  it('launches the published npm package, not an unbuilt dist/', () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { name: string };
+    const cfg = JSON.parse(readFileSync(join(ROOT, plugin.mcpServers as string), 'utf8')) as {
+      mcpServers: Record<string, { command: string; args: string[] }>;
+    };
+    const servers = Object.values(cfg.mcpServers);
+    expect(servers.length).toBeGreaterThan(0);
+    for (const s of servers) {
+      expect(s.command).toBe('npx');
+      expect(s.args).toEqual(['-y', pkg.name]);
+    }
+  });
 });
