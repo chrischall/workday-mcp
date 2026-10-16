@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.9](https://github.com/chrischall/workday-mcp/compare/v1.1.8...v1.1.9) (2026-10-16)
+
+
+### Bug Fixes
+
+* **deps:** Bump the production-dependencies group with 3 updates ([#159](https://github.com/chrischall/workday-mcp/issues/159)) ([aca694a](https://github.com/chrischall/workday-mcp/commit/aca694a5b674ce6d6502ccab2524b9d2dd4bc27b))
+* **graphql:** check workday_graphql documents with the shared read-only parser ([#161](https://github.com/chrischall/workday-mcp/issues/161)) ([ea3b18e](https://github.com/chrischall/workday-mcp/commit/ea3b18e226a6664ffdb233343e63469426c537a8))
+* **plugin:** launch the published package so marketplace installs start ([#162](https://github.com/chrischall/workday-mcp/issues/162)) ([c46d9d8](https://github.com/chrischall/workday-mcp/commit/c46d9d8b0a7f21ffa00e28bae143412f844b8e38))
+
 ## [1.1.8](https://github.com/chrischall/workday-mcp/compare/v1.1.7...v1.1.8) (2026-10-09)
 
 
