@@ -19,6 +19,7 @@ import {
   requireEnvVar,
   SessionNotAuthenticatedError,
 } from '@chrischall/mcp-utils';
+import { graphqlOperationKinds, isReadOnlyGraphqlDocument } from '@chrischall/mcp-utils/graphql';
 import type {
   BridgeProbeResult,
   BridgeStatus,
@@ -240,120 +241,6 @@ function isNameChar(ch: string): boolean {
 }
 
 /**
- * GraphQL type-system (SDL) definition keywords.
- *
- * These matter because several of them — `scalar`, `union`, `directive`,
- * `extend` — end WITHOUT a top-level `}`. The definition tracker below re-arms
- * on a closing top-level brace, so a braceless SDL definition would leave it
- * disarmed and a following `mutation` would go unseen. Rather than model every
- * SDL termination rule, a document containing any of these is refused as
- * unverifiable: Workday executes queries, not schema definitions, so this costs
- * nothing real and keeps the guard fail-closed instead of guessing.
- */
-const TYPE_SYSTEM_KEYWORDS = new Set([
-  'schema',
-  'scalar',
-  'type',
-  'interface',
-  'union',
-  'enum',
-  'input',
-  'directive',
-  'extend',
-]);
-
-/** Outcome of scanning a lexed document for write operations. */
-type WriteScan =
-  | { kind: 'read' }
-  | { kind: 'write'; keyword: string }
-  | { kind: 'unverifiable'; keyword: string };
-
-/**
- * Find a write operation by TOKEN POSITION rather than by pattern.
- *
- * Every regex attempt at this failed for the same reason: it enumerated the
- * characters allowed around the keyword, and an enumeration can always be
- * under-specified. Commas got through on the leading side, then again on the
- * trailing side. Meanwhile the pattern ALSO over-fired, rejecting the read
- * query `{ mutation { id } }` where `mutation` is simply a field name.
- *
- * Both faults are the same mistake — position is what matters, not spelling.
- * An operation definition can only begin at brace depth 0, and a field can only
- * appear at depth >= 1, so tracking depth settles both questions exactly.
- * Parens are tracked too, so a `}` closing an object default inside variable
- * definitions is not mistaken for the end of a definition.
- *
- * Returns the offending keyword, or null when the document is read-only.
- */
-function findWriteOperation(cleaned: string): WriteScan {
-  let i = 0;
-  let braceDepth = 0;
-  let parenDepth = 0;
-  // True when the next Name token would be the first token of a definition —
-  // the only position an operation keyword can occupy.
-  let atDefinitionStart = true;
-  while (i < cleaned.length) {
-    const ch = cleaned[i];
-    if (isIgnoredChar(ch)) {
-      i++;
-      continue;
-    }
-    if (ch === '(' || ch === '[') {
-      parenDepth++;
-      atDefinitionStart = false;
-      i++;
-      continue;
-    }
-    if (ch === ')' || ch === ']') {
-      parenDepth = Math.max(0, parenDepth - 1);
-      atDefinitionStart = false;
-      i++;
-      continue;
-    }
-    if (ch === '{') {
-      braceDepth++;
-      atDefinitionStart = false;
-      i++;
-      continue;
-    }
-    if (ch === '}') {
-      braceDepth = Math.max(0, braceDepth - 1);
-      // Only a brace closing at top level ends a definition; one inside
-      // variable definitions is closing an object default value.
-      if (braceDepth === 0 && parenDepth === 0) atDefinitionStart = true;
-      i++;
-      continue;
-    }
-    if (isNameStart(ch)) {
-      let j = i;
-      while (j < cleaned.length && isNameChar(cleaned[j])) j++;
-      if (braceDepth === 0 && parenDepth === 0 && atDefinitionStart) {
-        // Compared case-insensitively: GraphQL keywords are lowercase, so a
-        // capitalised variant cannot parse anyway, and refusing it is the safe
-        // direction. Only the FIRST token of a definition is tested, so
-        // `fragment Mutation` and `query mutation` are fine — the name of an
-        // operation or fragment is never examined. (`type Mutation` is NOT
-        // fine, but for an unrelated reason: `type` is a type-system keyword,
-        // refused just below.)
-        const keyword = cleaned.slice(i, j).toLowerCase();
-        if (keyword === 'mutation' || keyword === 'subscription') {
-          return { kind: 'write', keyword };
-        }
-        if (TYPE_SYSTEM_KEYWORDS.has(keyword)) {
-          return { kind: 'unverifiable', keyword };
-        }
-        atDefinitionStart = false;
-      }
-      i = j;
-      continue;
-    }
-    if (braceDepth === 0 && parenDepth === 0) atDefinitionStart = false;
-    i++;
-  }
-  return { kind: 'read' };
-}
-
-/**
  * Find an ALIASED selection of a secret- or PII-named field.
  *
  * The response redactor matches PII by KEY name (`ssn`, `nationalIdentifier`,
@@ -418,18 +305,35 @@ export function assertReadOnlyGraphql(query: string): void {
         'unterminated string literal. Fix the quoting and retry.'
     );
   }
-  const scan = findWriteOperation(cleaned);
-  if (scan.kind === 'write') {
+  // The operation-kind decision is mcp-utils' (a real tokenizer + top-level
+  // grammar). Keywords are compared case-insensitively: a capitalised
+  // `Mutation` cannot parse anyway, and naming it as a write is the safe
+  // reading. A type-system (SDL) word such as `extend` or `scalar` — or any
+  // other top-level word — is refused as unverifiable: Workday executes
+  // queries, not schema definitions.
+  const kinds = graphqlOperationKinds(query).map((k) => k.toLowerCase());
+  const write = kinds.find((k) => k === 'mutation' || k === 'subscription');
+  if (write) {
     throw new Error(
-      `workday-mcp is read-only: the GraphQL document declares a \`${scan.keyword}\` ` +
+      `workday-mcp is read-only: the GraphQL document declares a \`${write}\` ` +
         'operation. Only `query` operations are allowed.'
     );
   }
-  if (scan.kind === 'unverifiable') {
+  const other = kinds.find((k) => k !== 'query' && k !== 'fragment');
+  if (other) {
     throw new Error(
       `workday-mcp could not verify this GraphQL document is read-only: it contains a ` +
-        `\`${scan.keyword}\` type-system definition, whose extent cannot be tracked reliably. ` +
+        `top-level \`${other}\` definition (a type-system definition or an unknown keyword), ` +
+        'which is neither a query nor a fragment. ' +
         'Send only executable operations (`query` / `fragment`).'
+    );
+  }
+  // Fail closed on anything else the shared check cannot vouch for: unbalanced
+  // braces, a malformed definition head, or a document with no query at all.
+  if (!isReadOnlyGraphqlDocument(query)) {
+    throw new Error(
+      'workday-mcp could not verify this GraphQL document is read-only: it does not parse as ' +
+        'one or more `query` operations (check the braces and the definition heads).'
     );
   }
   const aliased = findSensitiveAlias(cleaned);
