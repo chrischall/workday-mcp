@@ -19,7 +19,12 @@ import {
   requireEnvVar,
   SessionNotAuthenticatedError,
 } from '@chrischall/mcp-utils';
-import { graphqlOperationKinds, isReadOnlyGraphqlDocument } from '@chrischall/mcp-utils/graphql';
+import {
+  graphqlOperationKinds,
+  inspectGraphqlDocument,
+  isReadOnlyGraphqlDocument,
+  type GraphqlDocumentInfo,
+} from '@chrischall/mcp-utils/graphql';
 import type {
   BridgeProbeResult,
   BridgeStatus,
@@ -140,160 +145,20 @@ export function stripJsonGuard(body: string): string {
   return start > 0 ? body.slice(start) : body;
 }
 
-/** Outcome of lexing a GraphQL document down to its executable text. */
-interface GraphqlLex {
-  /** The document with every comment and string literal blanked out. */
-  cleaned: string;
-  /** True when a string or block string was never closed, so the document
-   *  cannot be lexed with confidence. */
-  unterminated: boolean;
-}
-
-/**
- * Lex a GraphQL document, blanking comments and string literals, so an
- * operation-keyword scan cannot be fooled by the word `mutation` inside either.
- *
- * An explicit single left-to-right scan, deliberately NOT a sequence of regex
- * replaces. Any sequential order has a hole, because each pass is blind to the
- * construct the other owns:
- *   - comments first → a `#` inside a STRING blanks the rest of the line,
- *     hiding a same-line `mutation`;
- *   - strings first  → a `"""` inside a COMMENT opens a block string running to
- *     a `"""` in a later comment, swallowing the `mutation` between them.
- * A single alternation fixes both but still mis-reads an UNTERMINATED `"""`:
- * the quotes re-pair under a different reading and the document looks clean.
- * Scanning once, the way a real lexer does — whichever construct starts first
- * consumes its own content — is the only reading that cannot be gamed, and it
- * can also SAY when the document does not lex.
- */
-function lexGraphql(query: string): GraphqlLex {
-  let cleaned = '';
-  let i = 0;
-  while (i < query.length) {
-    if (query.startsWith('"""', i)) {
-      // `\"""` is GraphQL's block-string escape, NOT a terminator. Taking it as
-      // one makes the lexer re-open on the real terminator and run off the end,
-      // rejecting a valid read query as unterminated.
-      let j = i + 3;
-      let closed = false;
-      while (j < query.length) {
-        if (query.startsWith('\\"""', j)) {
-          j += 4;
-          continue;
-        }
-        if (query.startsWith('"""', j)) {
-          closed = true;
-          break;
-        }
-        j++;
-      }
-      if (!closed) return { cleaned, unterminated: true };
-      cleaned += ' ';
-      i = j + 3;
-      continue;
-    }
-    if (query[i] === '"') {
-      let j = i + 1;
-      let closed = false;
-      // A single-quoted GraphQL string cannot span a newline.
-      while (j < query.length && query[j] !== '\n') {
-        if (query[j] === '\\') {
-          j += 2;
-          continue;
-        }
-        if (query[j] === '"') {
-          closed = true;
-          break;
-        }
-        j++;
-      }
-      if (!closed) return { cleaned, unterminated: true };
-      cleaned += ' ';
-      i = j + 1;
-      continue;
-    }
-    if (query[i] === '#') {
-      const nl = query.indexOf('\n', i);
-      cleaned += ' ';
-      i = nl < 0 ? query.length : nl;
-      continue;
-    }
-    cleaned += query[i];
-    i++;
-  }
-  return { cleaned, unterminated: false };
-}
-
-/** GraphQL's Ignored tokens — whitespace, line terminators, COMMAS and the BOM.
- *  A comma carries no meaning, so it may appear anywhere whitespace may. */
-function isIgnoredChar(ch: string): boolean {
-  return (
-    ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === ',' || ch === '\uFEFF'
-  );
-}
-
-function isNameStart(ch: string): boolean {
-  return /[A-Za-z_]/.test(ch);
-}
-
-function isNameChar(ch: string): boolean {
-  return /[A-Za-z0-9_]/.test(ch);
-}
-
-/**
- * Find an ALIASED selection of a secret- or PII-named field.
- *
- * The response redactor matches PII by KEY name (`ssn`, `nationalIdentifier`,
- * `bankAccountNumber`), because GraphQL returns plain field-keyed JSON with no
- * sibling label to go on. But the response key is the caller's to choose: an
- * alias renames it, so `{ worker { a: nationalIdentifier } }` comes back as
- * `{ a: "..." }` and no key pattern can fire. One token defeats the redactor,
- * and the threat model is exactly a model (or an instruction injected into
- * fetched content) writing the query.
- *
- * An alias is `Name : Name` inside a selection set. Colons also appear in
- * variable definitions, arguments and object values, but every one of those
- * sits inside parentheses, so only colons at paren depth 0 and brace depth >=
- * 1 are aliases. Works on the lexed document, where strings and comments are
- * already blanked. Returns the aliased field name, or null.
- */
-function findSensitiveAlias(cleaned: string): string | null {
-  let braceDepth = 0;
-  let parenDepth = 0;
-  // Set when a `:` has just been seen in alias position: the next Name is the
-  // real field being selected.
-  let afterAliasColon = false;
-  let i = 0;
-  while (i < cleaned.length) {
-    const ch = cleaned[i];
-    if (isIgnoredChar(ch)) {
-      i++;
-      continue;
-    }
-    if (isNameStart(ch)) {
-      let j = i;
-      while (j < cleaned.length && isNameChar(cleaned[j])) j++;
-      if (afterAliasColon && isSecretKey(cleaned.slice(i, j))) return cleaned.slice(i, j);
-      afterAliasColon = false;
-      i = j;
-      continue;
-    }
-    afterAliasColon = false;
-    if (ch === '(' || ch === '[') parenDepth++;
-    else if (ch === ')' || ch === ']') parenDepth = Math.max(0, parenDepth - 1);
-    else if (ch === '{') braceDepth++;
-    else if (ch === '}') braceDepth = Math.max(0, braceDepth - 1);
-    else if (ch === ':' && braceDepth >= 1 && parenDepth === 0) afterAliasColon = true;
-    i++;
-  }
-  return null;
-}
-
 /** Throw unless `query` declares only read operations. workday-mcp is
  *  read-only, and a GraphQL passthrough is the one place a caller could
  *  otherwise hand Workday a write. */
 export function assertReadOnlyGraphql(query: string): void {
-  const { cleaned, unterminated } = lexGraphql(query);
+  // mcp-utils' inspector (a real tokenizer + cursor parser, fleet-audit#1231)
+  // reads the document once; whatever it cannot read is refused below.
+  let info: GraphqlDocumentInfo | undefined;
+  let unreadable: unknown;
+  try {
+    info = inspectGraphqlDocument(query);
+  } catch (err) {
+    unreadable = err;
+  }
+  const unterminated = unreadable !== undefined && /unterminated/.test(messageOf(unreadable));
   // A document that does not lex cannot be judged. Workday's own parser would
   // reject it as a syntax error, but refusing here keeps the guard fail-closed
   // rather than outsourcing the decision — an unterminated `"""` is exactly the
@@ -336,7 +201,24 @@ export function assertReadOnlyGraphql(query: string): void {
         'one or more `query` operations (check the braces and the definition heads).'
     );
   }
-  const aliased = findSensitiveAlias(cleaned);
+  // A document the shared check accepts but the inspector cannot read is
+  // refused too: its aliases cannot be listed, so the redaction guard below
+  // could not vouch for it.
+  if (!info) {
+    throw new Error(
+      'workday-mcp could not verify this GraphQL document is read-only: it does not parse ' +
+        `(${messageOf(unreadable)}).`
+    );
+  }
+  // Find an ALIASED selection of a secret- or PII-named field. The response
+  // redactor matches PII by KEY name (`ssn`, `nationalIdentifier`,
+  // `bankAccountNumber`), because GraphQL returns plain field-keyed JSON with
+  // no sibling label to go on. But the response key is the caller's to choose:
+  // an alias renames it, so `{ worker { a: nationalIdentifier } }` comes back
+  // as `{ a: "..." }` and no key pattern can fire. One token defeats the
+  // redactor, and the threat model is exactly a model (or an instruction
+  // injected into fetched content) writing the query.
+  const aliased = info.aliases.find((a) => isSecretKey(a.field))?.field;
   if (aliased) {
     throw new Error(
       `workday-mcp refuses to alias the sensitive field \`${aliased}\`: response redaction ` +

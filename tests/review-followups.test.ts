@@ -576,3 +576,20 @@ describe('assertReadOnlyGraphql on the shared operation-kind check', () => {
     expect(() => assertReadOnlyGraphql('Mutation M { x }')).toThrow(/read-only.*`mutation`/i);
   });
 });
+
+describe('read-only guard reads documents with the shared inspector (fleet-audit#1231)', () => {
+  // Aliases are listed by mcp-utils' inspectGraphqlDocument. A document it
+  // cannot read has no alias list to check, so it is refused even where the
+  // operation-kind check alone would pass it.
+  it('refuses a read the inspector cannot read', () => {
+    expect(() => assertReadOnlyGraphql('query Q { }')).toThrow(/could not verify.*empty selection set/i);
+    const deep = `query Q ${'{ a '.repeat(70)}${'}'.repeat(70)}`;
+    expect(() => assertReadOnlyGraphql(deep)).toThrow(/could not verify.*nested too deeply/i);
+  });
+
+  it('still finds an aliased PII field inside a fragment', () => {
+    expect(() =>
+      assertReadOnlyGraphql('query Q { worker { ...W } } fragment W on Worker { n: nationalIdentifier }')
+    ).toThrow(/alias the sensitive field `nationalIdentifier`/);
+  });
+});
