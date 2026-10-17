@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.10](https://github.com/chrischall/workday-mcp/compare/v1.1.9...v1.1.10) (2026-10-17)
+
+
+### Refactor
+
+* **graphql:** check workday_graphql aliases with mcp-utils inspectGraphqlDocument ([#164](https://github.com/chrischall/workday-mcp/issues/164)) ([fd7fb9f](https://github.com/chrischall/workday-mcp/commit/fd7fb9f6323e02a96623b8037f7acda27590eabf))
+
 ## [1.1.9](https://github.com/chrischall/workday-mcp/compare/v1.1.8...v1.1.9) (2026-10-16)
 
 
