@@ -4,6 +4,13 @@ slug: workday
 summary: >-
   Read-only Workday access for Claude — fetch your tasks, pay, benefits and
   compensation data through your signed-in session
+examples:
+  - prompt: Show me my reporting chain in Workday, with each person's title and location.
+    note: Reads your org chart via workday_get_org_chart.
+  - prompt: What does Workday have on my own profile? List the sections and named items I can open.
+    note: Read-only; uses workday_get_my_profile.
+  - prompt: Open the Absence app in Workday and summarize what it shows about my time off.
+    note: Follows the app hub down to its child cards with workday_open_app.
 #
 # Hosting note (a comment, not user-facing summary text): this is a
 # BROWSER-BRIDGE MCP — it reaches its site through the user's signed-in
