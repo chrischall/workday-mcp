@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.11](https://github.com/chrischall/workday-mcp/compare/v1.1.10...v1.1.11) (2026-10-23)
+
+
+### Bug Fixes
+
+* **deps:** Bump @chrischall/mcp-utils ([#170](https://github.com/chrischall/workday-mcp/issues/170)) ([a426b1c](https://github.com/chrischall/workday-mcp/commit/a426b1c5acee607ee7b0697e5447c88ddb69e5d0))
+
+
+### Documentation
+
+* **mint:** add sample prompts for the public catalog ([#167](https://github.com/chrischall/workday-mcp/issues/167)) ([5c867f6](https://github.com/chrischall/workday-mcp/commit/5c867f6c932739d634d28057e92d300d69bf81fe))
+
 ## [1.1.10](https://github.com/chrischall/workday-mcp/compare/v1.1.9...v1.1.10) (2026-10-17)
 
 
