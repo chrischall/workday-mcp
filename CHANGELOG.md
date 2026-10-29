@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.11](https://github.com/chrischall/workday-mcp/compare/v1.1.10...v1.1.11) (2026-10-29)
+
+
+### Bug Fixes
+
+* **deps:** Bump @chrischall/mcp-utils ([#170](https://github.com/chrischall/workday-mcp/issues/170)) ([a426b1c](https://github.com/chrischall/workday-mcp/commit/a426b1c5acee607ee7b0697e5447c88ddb69e5d0))
+* **deps:** require @chrischall/mcp-utils 3.4.0 ([#171](https://github.com/chrischall/workday-mcp/issues/171)) ([5f684f3](https://github.com/chrischall/workday-mcp/commit/5f684f369fb0bfd2388b5f2a300d393654c65bbd))
+* **deps:** require the MCP SDK ^2.4.0 that mcp-utils 3.4.0 peer-requires ([#172](https://github.com/chrischall/workday-mcp/issues/172)) ([82d3000](https://github.com/chrischall/workday-mcp/commit/82d3000b1c5daa19d99bd5174499d0753b42b6ee))
+
+
+### Documentation
+
+* **mint:** add sample prompts for the public catalog ([#167](https://github.com/chrischall/workday-mcp/issues/167)) ([5c867f6](https://github.com/chrischall/workday-mcp/commit/5c867f6c932739d634d28057e92d300d69bf81fe))
+
 ## [1.1.10](https://github.com/chrischall/workday-mcp/compare/v1.1.9...v1.1.10) (2026-10-17)
 
 
