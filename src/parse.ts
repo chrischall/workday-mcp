@@ -177,6 +177,21 @@ export interface WorkdayTask {
   /** Present when the page is a report PROMPT form rather than data: the
    *  parameters it wants before it will return anything. */
   prompts?: WorkdayPrompt[];
+  /** Present when the page is a set of `card` tiles (goals and the like). */
+  tiles?: WorkdayTile[];
+}
+
+/** A `card` widget tile — one goal on a worker's Goals page, say. Its
+ *  content lives behind `uri` (a `/card/all/...` data card). */
+export interface WorkdayTile {
+  title: string;
+  /** The card's header indicator ("Completed", "In Progress", …). */
+  status?: string;
+  /** The tab the card sits under ("Individual Goals", "Archived Goals"). */
+  group?: string;
+  uri?: string;
+  /** The card's footer actions that are GET-able pages ("View Goal"). */
+  actions?: WorkdayReference[];
 }
 
 /** A launchable Workday app from the user's app menu. */
@@ -566,6 +581,18 @@ function parseChildCards(root: Obj): WorkdayReference[] {
   return [...all.filter(isChildCard), ...all.filter((r) => !isChildCard(r))];
 }
 
+/** Add tile and navigation uris (which live under keys other than `uri`) to
+ *  the crawl frontier, deduped, child `card/all/...` cards still first. */
+function mergeFrontier(found: WorkdayReference[], extra: WorkdayReference[]): WorkdayReference[] {
+  const all = new Map<string, WorkdayReference>();
+  for (const r of found) if (r.uri) all.set(r.uri, r);
+  for (const r of extra) {
+    if (r.uri && isDataEndpoint(r.uri) && !all.has(r.uri)) all.set(r.uri, { label: r.label, uri: r.uri });
+  }
+  const list = [...all.values()];
+  const isChildCard = (r: WorkdayReference): boolean => !!r.uri?.includes(CHILD_CARD_MARKER);
+  return [...list.filter(isChildCard), ...list.filter((r) => !isChildCard(r))];
+}
 
 /** Widget subtrees the flat-field collector must not walk into: each has its
  *  own dedicated parser, and letting `collectFlat` loose in them would rip
@@ -803,11 +830,27 @@ function parseNavigation(root: Obj): WorkdayReference[] {
     seen.add(key);
     out.push(ref);
   };
+  // A dashboard's worklets all carry the SAME generic launcher `taskIid`;
+  // the report a worklet shows is `/task/<workletIid>` (verified live — some
+  // report worklets are permission-gated and fail, which a crawl records).
+  const tenant = str(root.tenant);
+  const taskUri = (id: string | undefined): string | undefined =>
+    tenant && id ? `/${tenant}/task/${id}.htmld` : undefined;
   for (const worklet of findWidgets(body, 'landingPageWorklet')) {
     const label = str(worklet.label);
     const taskId = str(worklet.taskIid);
+    const uri = taskUri(str(worklet.workletIid));
     if (label || taskId) {
-      push({ label: label ?? '', ...(taskId ? { instanceId: taskId } : {}) });
+      push({ label: label ?? '', ...(taskId ? { instanceId: taskId } : {}), ...(uri ? { uri } : {}) });
+    }
+  }
+  // Dashboard tabs (`landingPageGroup`): each tab is its own task page.
+  for (const tab of findWidgets(body, 'landingPageTab')) {
+    const label = str(tab.label);
+    const taskId = str(tab.taskIid);
+    const uri = taskUri(taskId);
+    if (label || taskId) {
+      push({ label: label ?? '', ...(taskId ? { instanceId: taskId } : {}), ...(uri ? { uri } : {}) });
     }
   }
   for (const item of findWidgets(body, 'landingPageMenuItem')) {
@@ -868,6 +911,51 @@ function parsePrompts(root: Obj): WorkdayPrompt[] | undefined {
   };
   walk(body, 0);
   return prompts.length ? prompts : undefined;
+}
+
+/**
+ * Parse `card` widget tiles — the shape a worker's Goals page takes: tabs of
+ * cards, one per goal, each with a header status and a `/card/all/...`
+ * `contentUri` holding the detail. No grid and no text widget, so without
+ * this the page parses as empty.
+ */
+function parseTiles(root: Obj): WorkdayTile[] {
+  const body = root.body;
+  if (!isObj(body)) return [];
+  const out: WorkdayTile[] = [];
+  const walk = (node: unknown, group: string | undefined, depth: number): void => {
+    if (depth > 40) return;
+    if (Array.isArray(node)) {
+      for (const n of node) walk(n, group, depth + 1);
+      return;
+    }
+    if (!isObj(node)) return;
+    const widget = str(node.widget);
+    if (widget === 'card' && str(node.title)) {
+      const status = str(node.headerIndicatorLabel);
+      const uri = ensureHtmld(str(node.contentUri));
+      const actions = (Array.isArray(node.footerButtons) ? node.footerButtons : [])
+        .filter(isObj)
+        .map((b) => ({ label: str(b.label) ?? '', raw: str(b.taskUri) ?? str(b.uri) }))
+        .filter((b) => b.raw && isDataEndpoint(b.raw))
+        .map((b) => ({ label: b.label, uri: ensureHtmld(b.raw) as string }));
+      out.push({
+        title: str(node.title) as string,
+        ...(status ? { status } : {}),
+        ...(group ? { group } : {}),
+        ...(uri ? { uri } : {}),
+        ...(actions.length ? { actions } : {}),
+      });
+      return;
+    }
+    const nextGroup = widget === 'tabContent' ? (str(node.label) ?? group) : group;
+    for (const [k, v] of Object.entries(node)) {
+      if (k === 'widget') continue;
+      walk(v, nextGroup, depth + 1);
+    }
+  };
+  walk(body, undefined, 0);
+  return out;
 }
 
 function parseUser(root: Obj): WorkdayTask['user'] {
@@ -1004,12 +1092,13 @@ function detectKind(parts: {
   navigation: WorkdayReference[];
   sections: WorkdaySection[];
   prompts?: WorkdayPrompt[];
+  tiles: WorkdayTile[];
 }): WorkdayPageKind {
   if (parts.profile) return 'profile';
   if (parts.org) return 'orgchart';
   if (parts.grids.length) return 'grid';
   if (parts.navigation.length) return 'hub';
-  if (parts.cardSections.length) return 'card';
+  if (parts.cardSections.length || parts.tiles.length) return 'card';
   // A page can carry BOTH data and inputs (a hub overview with a filter, say).
   // Real fields win — calling that a prompt would hide the data it already
   // returned. Only a page with no fields at all is a pure prompt form.
@@ -1042,6 +1131,7 @@ export function parseTask(root: unknown): WorkdayTask {
   const org = parseOrg(root);
   const navigation = parseNavigation(root);
   const prompts = parsePrompts(root);
+  const tiles = parseTiles(root);
   // Only fall back to flat-form collection when the page offered no structured
   // content of its own — otherwise a detail page's chrome would shadow it.
   const sections =
@@ -1051,11 +1141,15 @@ export function parseTask(root: unknown): WorkdayTask {
   const task: WorkdayTask = {
     sections,
     relatedTasks: parseRelatedTasks(root),
-    childCards: parseChildCards(root),
-    kind: detectKind({ cardSections, grids, profile, org, navigation, sections, prompts }),
+    childCards: mergeFrontier(parseChildCards(root), [
+      ...tiles.map((t) => ({ label: t.title, uri: t.uri })),
+      ...navigation,
+    ]),
+    kind: detectKind({ cardSections, grids, profile, org, navigation, sections, prompts, tiles }),
     grids,
     navigation,
     ...(prompts ? { prompts } : {}),
+    ...(tiles.length ? { tiles } : {}),
     ...(profile ? { profile } : {}),
     ...(org ? { org } : {}),
   };

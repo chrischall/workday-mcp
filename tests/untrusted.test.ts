@@ -57,6 +57,8 @@ const UNTRUSTED_TOOLS = [
   'workday_get_reviews',
   'workday_get_feedback',
   'workday_get_request_form',
+  'workday_get_inbox',
+  'workday_get_my_requests',
 ] as const;
 
 const TRUSTED_TOOLS = ['workday_get_apps', 'workday_get_org_chart', 'workday_get_team'] as const;
@@ -80,6 +82,8 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
       sections: [{ name: 'Values', values: [{ group: 'Manager Summary', label: 'Comment', value: INJECTION }] }],
     });
     vi.spyOn(client, 'getFeedback').mockResolvedValue({ matched: 'Feedback Received', feedback: [{ Feedback: INJECTION }] });
+    vi.spyOn(client, 'getInbox').mockResolvedValue({ total: 1, items: [{ title: INJECTION }] });
+    vi.spyOn(client, 'getMyRequests').mockResolvedValue({ requests: [{ Request: INJECTION }] });
     vi.spyOn(client, 'getRequestForm').mockResolvedValue({
       requestType: 'Promotion',
       questions: [{ number: 1, question: INJECTION, required: true, answerType: 'text' }],
@@ -124,6 +128,9 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
     ['workday_get_reviews', { worker: '247$42', review: 'latest' }],
     ['workday_get_feedback', { worker: '247$42' }],
     ['workday_get_request_form', { requestType: 'promotion' }],
+    ['workday_get_inbox', {}],
+    ['workday_get_inbox', { category: 'archive' }],
+    ['workday_get_my_requests', {}],
   ];
 
   it.each(calls)('%s fences its result, markers before the content', async (name, args) => {

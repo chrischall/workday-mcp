@@ -60,6 +60,8 @@ describe('tool registration', () => {
       'workday_get_reviews',
       'workday_get_feedback',
       'workday_get_request_form',
+      'workday_get_inbox',
+      'workday_get_my_requests',
     ]);
   });
 });

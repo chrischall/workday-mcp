@@ -122,6 +122,14 @@
     {
       "name": "workday_get_request_form",
       "description": "Load a request type's form (e.g. promotion consideration) and list its questions and required fields, without creating a request"
+    },
+    {
+      "name": "workday_get_inbox",
+      "description": "List the tasks waiting in your Workday inbox (review comments, feedback requests, approvals), or your archive"
+    },
+    {
+      "name": "workday_get_my_requests",
+      "description": "List the Workday requests you created, such as promotion consideration forms, with their status"
     }
   ]
 }
