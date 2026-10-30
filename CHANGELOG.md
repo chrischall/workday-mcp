@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0](https://github.com/chrischall/workday-mcp/compare/v1.1.11...v1.2.0) (2026-10-30)
+
+
+### Features
+
+* add inbox and my-requests tools, read goals and dashboards ([#177](https://github.com/chrischall/workday-mcp/issues/177)) ([3f45151](https://github.com/chrischall/workday-mcp/commit/3f45151ce2d8817d38bde911c8aaed66573fc76f))
+* add team, review, feedback and request-form tools ([#175](https://github.com/chrischall/workday-mcp/issues/175)) ([686a9d0](https://github.com/chrischall/workday-mcp/commit/686a9d048489ad06d24238e9edd8c66c6a76cdaf))
+* edit and submit open requests behind a confirm gate, add team snapshot ([#178](https://github.com/chrischall/workday-mcp/issues/178)) ([66b3cd1](https://github.com/chrischall/workday-mcp/commit/66b3cd191b870d62d8b6ef933ea41e7dd303fb3a))
+
+
+### Bug Fixes
+
+* **deps:** Bump @fetchproxy/server ([#173](https://github.com/chrischall/workday-mcp/issues/173)) ([ea2f7bd](https://github.com/chrischall/workday-mcp/commit/ea2f7bd2de83fb1ab97c2038d81479f264cfa3d5))
+* **requests:** only accept a request that is one of your open inbox requests ([#180](https://github.com/chrischall/workday-mcp/issues/180)) ([bb4cac0](https://github.com/chrischall/workday-mcp/commit/bb4cac03f8703c67bb60025d69bcf6c06c28a699))
+
 ## [1.1.11](https://github.com/chrischall/workday-mcp/compare/v1.1.10...v1.1.11) (2026-10-29)
 
 
