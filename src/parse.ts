@@ -1350,6 +1350,8 @@ export interface WorkdayQuestion {
   required: boolean;
   answerType: QuestionAnswerType;
   options?: string[];
+  /** The saved answer, on a request being revised. */
+  answer?: string;
 }
 
 export interface WorkdayQuestionnaire {
@@ -1393,10 +1395,37 @@ function splitQuestion(html: string): { question: string; help?: string; require
  * control but the one this question uses hidden (`hideAdvice: ALWAYS`).
  * "Required" is not a flag: it is appended to the prompt text.
  */
-export function parseQuestionnaire(root: unknown): WorkdayQuestionnaire | undefined {
-  if (!isObj(root) || !isObj(root.body)) return undefined;
-  const questions: WorkdayQuestion[] = [];
-  for (const panel of findWidgets(root.body, 'panel')) {
+/** One question's answer field — the handle a write posts to. */
+export interface WorkdayAnswerField {
+  number: number;
+  /** The field id, e.g. `1053/wd:Answer_Text`. PER PAGE LOAD: ids are
+   *  renumbered every time the page is rendered, so a write must post to the
+   *  ids of the page it just read. */
+  fieldId: string;
+  kind: 'text' | 'choice';
+  /** A choice field's options: posted by `instanceId`. */
+  options?: Array<{ text: string; instanceId: string }>;
+}
+
+/** What a write to a questionnaire page needs, beside its questions. */
+export interface WorkdayRequestModel extends WorkdayQuestionnaire {
+  fields: WorkdayAnswerField[];
+  /** The page body's id — the `_eventId_submit` that commits it. */
+  pageId: string;
+  flowKey: string;
+  /** The business-process Submit / Save for Later bar. */
+  bar: { id: string; submit: string; save: string };
+}
+
+interface ReadQuestion {
+  question: WorkdayQuestion;
+  field?: WorkdayAnswerField;
+}
+
+/** Read every question panel: the public question plus its answer field. */
+function readQuestionPanels(body: Obj): ReadQuestion[] {
+  const out: ReadQuestion[] = [];
+  for (const panel of findWidgets(body, 'panel')) {
     const children = Array.isArray(panel.children) ? panel.children.filter(isObj) : [];
     const prompt = children.find(
       (c) => str(c.widget) === 'richTextArea' && /Question_Body/.test(str(c.id) ?? '')
@@ -1405,23 +1434,72 @@ export function parseQuestionnaire(root: unknown): WorkdayQuestionnaire | undefi
     const { question, help, required } = splitQuestion(str(prompt.value) ?? '');
     const visible = children.filter((c) => c !== prompt && !isHidden(c));
     let answerType: QuestionAnswerType = 'unknown';
-    let options: string[] | undefined;
+    let control: Obj | undefined;
     for (const [widget, type] of ANSWER_TYPES) {
-      const control = visible.find((c) => str(c.widget) === widget);
+      control = visible.find((c) => str(c.widget) === widget);
       if (!control) continue;
       answerType = type;
-      if (type === 'choice' || type === 'multiple-choice') options = instanceTexts(control);
       break;
     }
-    questions.push({
-      number: questions.length + 1,
-      question,
-      ...(help ? { help } : {}),
-      required,
-      answerType,
-      ...(options?.length ? { options } : {}),
+    const number = out.length + 1;
+    const isChoice = answerType === 'choice' || answerType === 'multiple-choice';
+    const options = control && isChoice ? instanceTexts(control) : undefined;
+    let answer: string | undefined;
+    if (control && isChoice) {
+      const selected = selectedOptionTexts(control);
+      // Live radio options also flag themselves `selected: true`.
+      const flagged = (Array.isArray(control.instances) ? control.instances : [])
+        .filter((o): o is Obj => isObj(o) && o.selected === true)
+        .map((o) => str(o.text) ?? '');
+      const texts = selected.length ? selected : flagged.filter(Boolean);
+      if (texts.length) answer = texts.join(', ');
+    } else if (control && answerType === 'text') {
+      const v = str(control.value);
+      if (v) answer = RICH_TEXT_WIDGETS.has(str(control.widget) ?? '') ? stripHtml(v) : v;
+    }
+    const fieldId = control ? str(control.id) : undefined;
+    let field: WorkdayAnswerField | undefined;
+    if (fieldId && answerType === 'text') field = { number, fieldId, kind: 'text' };
+    if (fieldId && answerType === 'choice' && control) {
+      field = {
+        number,
+        fieldId,
+        kind: 'choice',
+        options: (Array.isArray(control.instances) ? control.instances : [])
+          .filter(isObj)
+          .map((o) => ({ text: str(o.text) ?? '', instanceId: str(o.instanceId) ?? '' }))
+          .filter((o) => o.text && o.instanceId),
+      };
+    }
+    out.push({
+      question: {
+        number,
+        question,
+        ...(help ? { help } : {}),
+        required,
+        answerType,
+        ...(options?.length ? { options } : {}),
+        ...(answer !== undefined ? { answer } : {}),
+      },
+      ...(field ? { field } : {}),
     });
   }
+  return out;
+}
+
+/**
+ * Parse a Workday questionnaire (a Request's form, e.g. a promotion
+ * consideration form) into its questions — with their saved answers when the
+ * page is a request being revised.
+ *
+ * Each question is a panel holding a `Question_Body` rich-text prompt plus
+ * one answer control per possible type — text, date, number — with every
+ * control but the one this question uses hidden (`hideAdvice: ALWAYS`).
+ * "Required" is not a flag: it is appended to the prompt text.
+ */
+export function parseQuestionnaire(root: unknown): WorkdayQuestionnaire | undefined {
+  if (!isObj(root) || !isObj(root.body)) return undefined;
+  const questions = readQuestionPanels(root.body).map((q) => q.question);
   if (!questions.length) return undefined;
   const instructionsNode = findWidgets(root.body, 'richTextArea').find((n) =>
     /Questionnaire_Instructions/.test(str(n.id) ?? '')
@@ -1433,4 +1511,28 @@ export function parseQuestionnaire(root: unknown): WorkdayQuestionnaire | undefi
     ...(instructions ? { instructions } : {}),
     questions,
   };
+}
+
+/**
+ * A questionnaire page plus the handles needed to WRITE to it: each
+ * question's answer field, the page id, the flow key, and the Submit / Save
+ * for Later bar. Undefined unless the page carries that bar — a page without
+ * one is not a form that can be saved or submitted.
+ */
+export function parseRequestModel(root: unknown): WorkdayRequestModel | undefined {
+  if (!isObj(root) || !isObj(root.body)) return undefined;
+  const questionnaire = parseQuestionnaire(root);
+  const pageId = str(root.body.id);
+  const flowKey = str(root.flowExecutionKey);
+  const barNode = findWidgets(root.body, 'bpfButtonBar')[0];
+  if (!questionnaire || !pageId || !flowKey || !barNode) return undefined;
+  const buttons = (Array.isArray(barNode.bpfButtons) ? barNode.bpfButtons : []).filter(isObj);
+  const submit = str(buttons.find((b) => /^submit$/i.test(str(b.label) ?? ''))?.valueIid);
+  const save = str(buttons.find((b) => /save for later/i.test(str(b.label) ?? ''))?.valueIid);
+  const barId = str(barNode.id);
+  if (!barId || !submit || !save) return undefined;
+  const fields = readQuestionPanels(root.body)
+    .map((q) => q.field)
+    .filter((f): f is WorkdayAnswerField => !!f);
+  return { ...questionnaire, fields, pageId, flowKey, bar: { id: barId, submit, save } };
 }

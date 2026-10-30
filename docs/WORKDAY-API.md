@@ -244,6 +244,29 @@ All plain GETs unless noted, and every hop is matched by LABEL:
 - **My Requests** — delivered task `3005$4617`: a grid of Request, Type,
   Request ID, Description, Status, Resolution, Initiation / Completion Date.
 
+### Revising a request (captured 2026-10)
+
+An open request is the inbox's **"Revise Request"** task
+(`/{tenant}/inst/<requestIid>/rel-task/2997$12874`). A GET returns the
+questionnaire with its saved answers (text in the visible `textAreaInput`'s
+`value`; a choice as the radio list's `selectedIds`, options also flagged
+`selected`) plus a `bpfButtonBar` (Submit `934$20`, Save for Later `934$14`),
+the page `body.id` and a `flowExecutionKey`. **Field ids are renumbered on
+every page load**, so a write posts to the ids of the page it just read. The
+web app's save, captured from the user's own Save for Later:
+
+1. text answer → `_eventId_validate=<fieldId>`, `<fieldId>=<text>`
+2. choice answer → `_eventId_add=<fieldId>`, `<fieldId>=<optionIid>`,
+   `<iid>_DID=<text>`, `<iid>_IID`, `<iid>_PV=1`, `<iid>_V=1`
+   (`_eventId_validate` on a radio list returns `System_Error`)
+3. the action → `_eventId_add=<barId>`, `<barId>=<buttonIid>`,
+   `<buttonIid>_DID=<label>`, `<buttonIid>_IID=<buttonIid>`
+4. commit → `_eventId_submit=<body.id>`
+
+Steps 1–3 each return a `changeSummary`; without step 4 nothing is saved.
+`_eventId_cancel` on a GET-opened revise flow returns `Application_Error` —
+leave such a flow to expire.
+
 ## Session-expiry detection
 
 An expired session bounces to the IdP. The client flags sign-out when the final

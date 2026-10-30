@@ -7,6 +7,7 @@ import { registerTaskTools } from '../src/tools/task.js';
 import { registerPeopleTools } from '../src/tools/people.js';
 import { registerRawTools } from '../src/tools/raw.js';
 import { registerReviewTools } from '../src/tools/review.js';
+import { registerRequestTools } from '../src/tools/requests.js';
 import type { BridgeProbeResult, BridgeStatus, WorkdayTransport } from '../src/transport.js';
 
 /**
@@ -17,8 +18,8 @@ import type { BridgeProbeResult, BridgeStatus, WorkdayTransport } from '../src/t
  * claim to be destructive. Reads the annotations off the wire (tools/list),
  * not a hand-kept list.
  *
- * workday-mcp is read-only in v1 (CLAUDE.md), so today the write checks pass
- * vacuously; they exist so the first write tool has to pick a boolean.
+ * workday-mcp's one write is workday_update_request (confirm-gated), so the
+ * write checks below hold it to an explicit destructiveHint.
  */
 interface Ann { readOnlyHint?: unknown; destructiveHint?: unknown; openWorldHint?: unknown }
 
@@ -48,6 +49,7 @@ beforeAll(async () => {
     registerPeopleTools(s, client);
     registerRawTools(s, client);
     registerReviewTools(s, client);
+    registerRequestTools(s, client);
   });
   ann = Object.fromEntries(
     (await harness.client.listTools()).tools.map((t) => [t.name, t.annotations as Ann | undefined]),
@@ -59,7 +61,7 @@ afterAll(async () => {
 
 describe('tool annotations', () => {
   it('covers the full surface (guards against a registrar being dropped here)', () => {
-    expect(Object.keys(ann)).toHaveLength(16);
+    expect(Object.keys(ann)).toHaveLength(19);
   });
 
   it('sets an explicit boolean readOnlyHint on every tool', () => {
@@ -86,7 +88,11 @@ describe('tool annotations', () => {
     expect(Object.entries(ann).filter(([, a]) => a?.openWorldHint !== true).map(([n]) => n)).toEqual([]);
   });
 
-  it('serves only reads (read-only in v1)', () => {
-    expect(Object.entries(ann).filter(([, a]) => a?.readOnlyHint !== true).map(([n]) => n)).toEqual([]);
+  it('has exactly one write — the confirm-gated request update — and no other', () => {
+    // A new write must be added here on purpose, with a confirmWrite gate and
+    // a gate test (see tests/tool-request-write.test.ts).
+    expect(Object.entries(ann).filter(([, a]) => a?.readOnlyHint !== true).map(([n]) => n)).toEqual([
+      'workday_update_request',
+    ]);
   });
 });

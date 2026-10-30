@@ -66,6 +66,9 @@ yourself, or check a release zip against the `.sha256` file published beside it
 | `workday_get_feedback` | Feedback a worker received, gave, or requested — author, date, badge and full text |
 | `workday_get_inbox` | Your inbox ("My Tasks"): review comments to provide, feedback requests, questionnaires, approvals — each with a `uri` to open read-only. `category: "archive"` for completed items |
 | `workday_get_my_requests` | The requests you created (e.g. promotion consideration forms) with their status |
+| `workday_get_team_snapshot` | One table of everyone in your organization — grade, job profile, last promotion, rating, pay — from the My Team hub's associates report |
+| `workday_get_request` | Your open requests (e.g. promotion forms you started), or one request's questions with its saved answers |
+| `workday_update_request` | **Write.** Change answers on an open request and Save for Later or Submit it — confirmation-token gated, verified by re-read |
 | `workday_get_request_form` | A request type's form (e.g. a promotion consideration form): instructions plus every question, required flag, answer type and options. Opens a new request to read it and cancels it before returning, so nothing is created |
 | `workday_fetch` | Raw `.htmld` read with secrets redacted — the escape hatch for pages the parser doesn't model yet |
 | `workday_graphql` | Read-only GraphQL against Workday's PEX surface (mutations refused). The only route to Inbox / search |
@@ -95,7 +98,22 @@ workday_get_feedback       { worker: "247$42" }         → feedback received
 workday_get_request_form   { requestType: "promotion consideration" } → the form's questions
 workday_get_inbox                                       → review steps and requests waiting on you
 workday_get_my_requests                                 → status of what you submitted
+workday_get_team_snapshot                               → grade, last promotion, rating for everyone
+workday_get_request        { request: "20447$18949" }  → a draft's questions + saved answers
+workday_update_request     { request, answers: { "8": "…" }, action: "save" }  → preview + confirmToken
+workday_update_request     { …same…, confirmToken }     → writes, then re-reads to verify
 ```
+
+### Writes
+
+`workday_update_request` is the only tool that changes anything. It is gated
+by the fleet confirm flow (`@chrischall/mcp-utils` `confirmWrite`): the first
+call returns a preview of every changed answer and a single-use `confirmToken`
+and sends nothing; only a repeat call with that token writes. The token is
+bound to the request, the action, the answers, the preview and a hash of the
+request's saved answers from a fresh read, so it is refused if any of them
+changes. Configure with `MCP_CONFIRM_MODE` / `MCP_CONFIRM_TTL_SECONDS` /
+`MCP_CONFIRM_SECRET`.
 
 All ids are discovered at runtime from your own app menu and org chart — nothing
 tenant-specific is hardcoded, so this works on any Workday tenant.
