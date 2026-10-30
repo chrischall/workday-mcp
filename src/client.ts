@@ -214,6 +214,28 @@ export interface WorkdayRequestForm extends WorkdayQuestionnaire {
  */
 const CREATE_REQUEST_TASK = '2997$12683';
 
+/** Workday's delivered "My Requests" report — a GET-able grid of the
+ *  requests you created, with status. Delivered, like Create Request. */
+const MY_REQUESTS_TASK = '3005$4617';
+
+/** One item waiting in your Workday inbox ("My Tasks"). */
+export interface WorkdayInboxItem {
+  title: string;
+  /** The business process it belongs to ("Performance Review", …). */
+  type?: string;
+  /** What you are asked to do ("Provide Employee Review Comments"). */
+  task?: string;
+  created?: string;
+  effective?: string;
+  starred?: boolean;
+  /** GET-able page for the task — open it with `workday_get_task`. */
+  uri?: string;
+  /** GET-able "View Details" page for the business process. */
+  detailsUri?: string;
+}
+
+export type InboxCategory = 'actions' | 'archive';
+
 const DEFAULT_CRAWL_DEPTH = 1;
 const DEFAULT_MAX_CARDS = 12;
 const DEFAULT_CRAWL_CONCURRENCY = 4;
@@ -309,8 +331,6 @@ export function assertReadOnlyGraphql(query: string): void {
   }
 }
 
-/** Match an app by label: case-insensitive substring, or a RegExp. Returns the
- *  first match in menu order — Workday's own relevance ordering. */
 /** Find a named task in a profile's catalog: an exact label wins, then the
  *  first label containing it (in catalog order). */
 function findProfileTask(
@@ -392,6 +412,8 @@ function parseTypeInput(page: Record<string, unknown>): { id: string; contextId:
   return hit;
 }
 
+/** Match an app by label: case-insensitive substring, or a RegExp. Returns the
+ *  first match in menu order — Workday's own relevance ordering. */
 function matchApp(apps: WorkdayApp[], match: string | RegExp): WorkdayApp | null {
   const test =
     typeof match === 'string'
@@ -1006,6 +1028,109 @@ export class WorkdayClient {
     } finally {
       await this.cancelFlow(flowKey);
     }
+  }
+
+  /**
+   * Your Workday inbox ("My Tasks"): review steps, feedback requests,
+   * questionnaires and approvals waiting for you.
+   *
+   * The inbox is a JSON API, not an `.htmld` page, and it wants a DIFFERENT
+   * session token from the envelope one: the token inside `boot-config`'s
+   * `appRoot` (itself a JSON string). With the envelope token it answers
+   * with the HTML app shell. The token is read here, sent as a header, and
+   * never returned. Read-only: a plain GET.
+   */
+  async getInbox(
+    category: InboxCategory = 'actions',
+    limit = 100
+  ): Promise<{ total: number; items: WorkdayInboxItem[] }> {
+    const token = await this.inboxToken();
+    const cat = category === 'archive' ? 'Archive' : 'Actions';
+    const path =
+      `/${this.tenant}/internalapi/internalapi/inbox/v2/${this.tenant}/inboxItems` +
+      `?category=${cat}&offset=0&limit=${limit}`;
+    const result = await this.transport.fetch({
+      path,
+      method: 'GET',
+      headers: { Accept: 'application/json', 'Session-Secure-Token': token },
+    });
+    this.throwIfNotOk(result, 'GET', path);
+    this.throwIfSignedOut(result);
+    let json: unknown;
+    try {
+      json = JSON.parse(result.body);
+    } catch {
+      throw new Error(
+        'Workday answered the inbox request with a web page instead of inbox data, which means ' +
+          'it did not accept the inbox session token. Reload your Workday tab and retry.'
+      );
+    }
+    const safe = redactTree(json) as { total?: unknown; data?: unknown };
+    const data = Array.isArray(safe.data) ? safe.data : Array.isArray(safe) ? safe : [];
+    const items = data.map((raw) => this.inboxItem(raw)).filter((i): i is WorkdayInboxItem => i !== null);
+    return { total: typeof safe.total === 'number' ? safe.total : items.length, items };
+  }
+
+  private inboxItem(raw: unknown): WorkdayInboxItem | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, Record<string, unknown> | undefined>;
+    const rel = o.relatedItem ?? {};
+    const exec = o.taskToExecute ?? {};
+    const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
+    const title = str(rel.title);
+    if (!title) return null;
+    const type = str((rel.itemType as Record<string, unknown> | undefined)?.descriptor);
+    const uri = str(exec.uri);
+    const details = (Array.isArray(o.relatedTasks) ? (o.relatedTasks as Array<Record<string, unknown>>) : []).find(
+      (t) => t?.label === 'View Details'
+    );
+    const detailsUri = str(details?.uri);
+    return {
+      title,
+      ...(type ? { type } : {}),
+      ...(str(exec.label) ? { task: str(exec.label) } : {}),
+      ...(str(rel.createdDate) ? { created: str(rel.createdDate) } : {}),
+      ...(str(rel.effectiveDate) ? { effective: str(rel.effectiveDate) } : {}),
+      ...((o.status as Record<string, unknown> | undefined)?.starred === true ? { starred: true } : {}),
+      ...(uri ? { uri: this.resolvePath(uri) } : {}),
+      ...(detailsUri ? { detailsUri: this.resolvePath(detailsUri) } : {}),
+    };
+  }
+
+  /** The inbox API's session token, from `boot-config` → `appRoot` (a JSON
+   *  string). Held only for the request; never stored or returned. */
+  private async inboxToken(): Promise<string> {
+    const body = await this.fetchRaw(`/${this.tenant}/boot-config`);
+    let token: unknown;
+    try {
+      const appRoot = (JSON.parse(stripJsonGuard(body)) as { appRoot?: unknown }).appRoot;
+      const root = typeof appRoot === 'string' ? JSON.parse(appRoot) : appRoot;
+      token = (root as Record<string, unknown> | undefined)?.sessionSecureToken;
+    } catch {
+      token = undefined;
+    }
+    if (typeof token !== 'string' || !token) {
+      throw new Error(
+        'Workday\'s boot-config did not include the inbox session token, so the inbox cannot be ' +
+          'read. Reload your Workday tab and retry.'
+      );
+    }
+    return token;
+  }
+
+  /** The requests you created (e.g. promotion consideration forms you
+   *  submitted) with their status, from Workday's delivered "My Requests". */
+  async getMyRequests(): Promise<{ requests: Array<Record<string, string>>; incomplete?: { shown: number; total: number } }> {
+    const page = await this.getTask(`/${this.tenant}/task/${MY_REQUESTS_TASK}.htmld`);
+    if (!/my requests/i.test(page.title ?? '')) {
+      throw new Error(
+        `Workday's My Requests report returned "${page.title ?? 'an untitled page'}" instead. Open ` +
+          'Requests → My Requests in your browser to check you can see it.'
+      );
+    }
+    const requests = page.grids.flatMap((g) => g.rows.map((r) => r.cells));
+    const total = page.grids.reduce((n, g) => n + (g.totalRowCount ?? g.rows.length), 0);
+    return { requests, ...(total > requests.length ? { incomplete: { shown: requests.length, total } } : {}) };
   }
 
   /** Abandon a flow. Best effort: a failure here must not mask the result. */

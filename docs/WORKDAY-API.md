@@ -218,6 +218,32 @@ All plain GETs unless noted, and every hop is matched by LABEL:
   `radioButtonSelectList`. Instructions are the `richTextArea` whose id
   contains `Questionnaire_Instructions`.
 
+### Inbox, goals, dashboards (captured 2026-10)
+
+- **Inbox / My Tasks is a plain GET JSON API**, not GraphQL-only:
+  `GET /{tenant}/internalapi/internalapi/inbox/v2/{tenant}/inboxItems?category=Actions&offset=0&limit=100`
+  (`category=Archive` for completed items) → `{ total, data: [ { relatedItem:
+  {title, subtitle, createdDate, effectiveDate, itemType:{descriptor}},
+  taskToExecute: {label, uri}, relatedTasks: [{label, uri}], status: {starred} } ] }`.
+  It needs header `Session-Secure-Token` set to the token in
+  `GET /{tenant}/boot-config` → `appRoot` (a JSON STRING) → `sessionSecureToken`.
+  That is a different token from the `.htmld` envelope's; with the envelope
+  token the API answers with the HTML app shell. `taskToExecute.uri` is a
+  `/d/` SPA uri whose data endpoint opens read-only. Notifications are not
+  under this endpoint (`category=Notifications` silently returns Actions).
+  `GET /{tenant}/unifiedinbox/actioncount/<id>.htmld` returns just the counts.
+- **Goals** (profile → Goals) render as `tabContainer` → `tabContent`
+  ("Individual Goals", "Archived Goals", "Organization Goals") → `card`
+  widgets: `title`, `headerIndicatorLabel` (status), `contentUri` (a
+  `/card/all/...` data card with the detail), `footerButtons[].taskUri`.
+- **Dashboards.** `landingPageGroup` → `landingPageTab` (`taskIid` is the
+  tab's task). Every `landingPageWorklet` on a dashboard shares the generic
+  launcher `taskIid` (`3001$26` here); its report is `GET /task/<workletIid>`.
+  Some return a grid, many are prompt reports, a few are permission-gated
+  (`System_Error`).
+- **My Requests** — delivered task `3005$4617`: a grid of Request, Type,
+  Request ID, Description, Status, Resolution, Initiation / Completion Date.
+
 ## Session-expiry detection
 
 An expired session bounces to the IdP. The client flags sign-out when the final
@@ -235,7 +261,8 @@ Verified against 26 captured envelopes, 24 of which carried a live
 
 ## Follow-ons (not yet)
 
-- **Inbox / "My Tasks" + global search** — no GET-able `.htmld`; served by the
+- **Global search** — no GET-able `.htmld` (the inbox turned out to be a GET
+  JSON API; see above); served by the
   GraphQL surface (`/wday/pex/graphql/graphql?operation=…`, POST). The
   `workday_graphql` tool can reach it, but Workday does not publish the
   operations, so the documents must be captured from the browser first.

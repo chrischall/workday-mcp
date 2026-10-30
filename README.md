@@ -64,6 +64,8 @@ yourself, or check a release zip against the `.sha256` file published beside it
 | `workday_get_team` | The people on the teams you manage — each with worker id, position, location and profile link |
 | `workday_get_reviews` | A worker's performance reviews (period, rating), or one review in full: manager and employee ratings and comments, goals, development items |
 | `workday_get_feedback` | Feedback a worker received, gave, or requested — author, date, badge and full text |
+| `workday_get_inbox` | Your inbox ("My Tasks"): review comments to provide, feedback requests, questionnaires, approvals — each with a `uri` to open read-only. `category: "archive"` for completed items |
+| `workday_get_my_requests` | The requests you created (e.g. promotion consideration forms) with their status |
 | `workday_get_request_form` | A request type's form (e.g. a promotion consideration form): instructions plus every question, required flag, answer type and options. Opens a new request to read it and cancels it before returning, so nothing is created |
 | `workday_fetch` | Raw `.htmld` read with secrets redacted — the escape hatch for pages the parser doesn't model yet |
 | `workday_graphql` | Read-only GraphQL against Workday's PEX surface (mutations refused). The only route to Inbox / search |
@@ -91,6 +93,8 @@ workday_get_reviews        { worker: "247$42" }         → their review history
 workday_get_reviews        { worker: "247$42", review: "latest" }   → ratings + comments
 workday_get_feedback       { worker: "247$42" }         → feedback received
 workday_get_request_form   { requestType: "promotion consideration" } → the form's questions
+workday_get_inbox                                       → review steps and requests waiting on you
+workday_get_my_requests                                 → status of what you submitted
 ```
 
 All ids are discovered at runtime from your own app menu and org chart — nothing

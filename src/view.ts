@@ -62,7 +62,8 @@ export function viewResponse(view: string | undefined, data: unknown): ReturnTyp
  * and appends {@link UNTRUSTED_DESCRIPTION_SUFFIX} to its description.
  *
  * Fenced: get_task, open_app, get_worker, get_worker_task, get_my_profile,
- * fetch, graphql, get_reviews, get_feedback, get_request_form. Not fenced:
+ * fetch, graphql, get_reviews, get_feedback, get_request_form, get_inbox,
+ * get_my_requests. Not fenced:
  * get_apps (the user's own app menu), get_org_chart and get_team (assembled
  * records of names/titles), and healthcheck.
  */

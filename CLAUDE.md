@@ -34,7 +34,9 @@ every request rides the user's signed-in `*.myworkday.com` tab.
   `SessionNotAuthenticatedError`), and the composed reads: `crawl` (hub → child
   cards, bounded by depth/maxCards/visited), `resolveApp`/`openApp` (by LABEL,
   never a captured id), `getWorker`/`getWorkerTask`/`getOrgChart`,
-  `getTeam`/`getReviews`/`getReview`/`getFeedback`, `getRequestForm`, and a
+  `getTeam`/`getReviews`/`getReview`/`getFeedback`, `getRequestForm`,
+  `getInbox` (a JSON API that wants the token from `boot-config`'s `appRoot`,
+  NOT the envelope token), `getMyRequests`, and a
   query-only `graphql`. **`getRequestForm` is the one non-GET read**: Workday
   only renders a request's form inside the Create Request flow, so it drives
   that flow with form-urlencoded `postForm` steps and ALWAYS cancels it.

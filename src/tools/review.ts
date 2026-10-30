@@ -130,4 +130,50 @@ export function registerReviewTools(server: McpServer, client: WorkdayClient): v
     },
     async ({ requestType, view }) => viewResponse(view, await client.getRequestForm(requestType))
   );
+
+  server.registerTool(
+    'workday_get_inbox',
+    {
+      title: 'Read your Workday inbox',
+      description: untrustedDescription(
+        'List the tasks waiting for you in Workday ("My Tasks"): review comments to provide, ' +
+          'feedback requests, questionnaires, approvals — each with its business-process type, ' +
+          'dates, and a `uri` you can open read-only with `workday_get_task`. `category: "archive"` ' +
+          'lists completed items instead. Read-only.'
+      ),
+      annotations: {
+        title: 'Read your Workday inbox',
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+      inputSchema: z.object({
+        view: viewArg(),
+        category: z
+          .enum(['actions', 'archive'])
+          .optional()
+          .describe('`actions` (default) for open tasks, `archive` for completed ones.'),
+      }),
+    },
+    async ({ category, view }) => viewResponse(view, await client.getInbox(category))
+  );
+
+  server.registerTool(
+    'workday_get_my_requests',
+    {
+      title: 'List your requests',
+      description: untrustedDescription(
+        'List the Workday requests you created — promotion consideration forms and the like — ' +
+          'with type, request id, status, resolution and dates. Read-only.'
+      ),
+      annotations: {
+        title: 'List your requests',
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+      inputSchema: z.object({ view: viewArg() }),
+    },
+    async ({ view }) => viewResponse(view, await client.getMyRequests())
+  );
 }
