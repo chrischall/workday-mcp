@@ -1217,13 +1217,20 @@ export class WorkdayClient {
       }));
   }
 
-  /** The inbox uri of an open request, by id (or a uri passed through). */
+  /**
+   * The inbox uri of an open request, by id — or by uri, but only when that
+   * uri IS one of your open "Revise Request" tasks. Never a raw path passed
+   * through: the write path relies on every request being an open inbox
+   * request (its submit verification checks the request left the inbox).
+   */
   private async requestUri(request: string): Promise<string> {
     const r = request.trim();
-    if (r.startsWith('/')) return this.resolvePath(r);
+    const wanted = r.startsWith('/') ? requestIdOf(this.resolvePath(r)) : r;
     const { items } = await this.getInbox('actions');
     const open = items.filter((i) => /revise request/i.test(i.task ?? '') && i.uri);
-    const hit = open.find((i) => requestIdOf(i.uri as string) === r);
+    const hit = wanted
+      ? open.find((i) => requestIdOf(i.uri as string) === wanted && (!r.startsWith('/') || i.uri === this.resolvePath(r)))
+      : undefined;
     if (!hit?.uri) {
       throw new Error(
         `No open request "${r}" in your inbox. Open requests: ` +
