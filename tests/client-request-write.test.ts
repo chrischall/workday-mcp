@@ -121,6 +121,14 @@ describe('WorkdayClient.listOpenRequests / getRequest', () => {
     expect(transport.calls.some((c) => c.method === 'POST')).toBe(false);
   });
 
+  it('accepts a path only when it is one of your open requests', async () => {
+    const { client } = makeClient();
+    const req = await client.getRequest('/acme/d/inst/20447$1/rel-task/2997$12874.htmld');
+    expect(req.request).toBe('20447$1');
+    await expect(client.getRequest('/acme/inst/1$2/rel-task/2997$1.htmld')).rejects.toThrow(/No open request/);
+    await expect(client.planRequestUpdate('/acme/task/2998$1.htmld', {}, 'submit')).rejects.toThrow(/No open request/);
+  });
+
   it('names the open requests when the id is unknown', async () => {
     const { client } = makeClient();
     await expect(client.getRequest('99$9')).rejects.toThrow(/20447\$1.*20447\$2/s);
