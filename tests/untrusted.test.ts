@@ -6,6 +6,7 @@ import { registerAppsTools } from '../src/tools/apps.js';
 import { registerPeopleTools } from '../src/tools/people.js';
 import { registerRawTools } from '../src/tools/raw.js';
 import { registerTaskTools } from '../src/tools/task.js';
+import { registerReviewTools } from '../src/tools/review.js';
 import { WD_UNTRUSTED_NOTE } from '../src/view.js';
 import type {
   BridgeProbeResult,
@@ -53,9 +54,12 @@ const UNTRUSTED_TOOLS = [
   'workday_get_my_profile',
   'workday_fetch',
   'workday_graphql',
+  'workday_get_reviews',
+  'workday_get_feedback',
+  'workday_get_request_form',
 ] as const;
 
-const TRUSTED_TOOLS = ['workday_get_apps', 'workday_get_org_chart'] as const;
+const TRUSTED_TOOLS = ['workday_get_apps', 'workday_get_org_chart', 'workday_get_team'] as const;
 
 describe('untrusted-content framing (fleet-audit#913)', () => {
   let harness: Awaited<ReturnType<typeof createTestHarness>>;
@@ -70,11 +74,22 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
     vi.spyOn(client, 'fetchRawJson').mockResolvedValue({ body: { value: INJECTION } });
     vi.spyOn(client, 'graphql').mockResolvedValue({ data: { inbox: [{ subject: INJECTION }] } });
     vi.spyOn(client, 'getApps').mockResolvedValue([]);
+    vi.spyOn(client, 'getReviews').mockResolvedValue({ reviews: [{ review: INJECTION, status: 'Completed' }] });
+    vi.spyOn(client, 'getReview').mockResolvedValue({
+      review: '2025 Year-End',
+      sections: [{ name: 'Values', values: [{ group: 'Manager Summary', label: 'Comment', value: INJECTION }] }],
+    });
+    vi.spyOn(client, 'getFeedback').mockResolvedValue({ matched: 'Feedback Received', feedback: [{ Feedback: INJECTION }] });
+    vi.spyOn(client, 'getRequestForm').mockResolvedValue({
+      requestType: 'Promotion',
+      questions: [{ number: 1, question: INJECTION, required: true, answerType: 'text' }],
+    });
     harness = await createTestHarness((server) => {
       registerAppsTools(server, client);
       registerTaskTools(server, client);
       registerPeopleTools(server, client);
       registerRawTools(server, client);
+      registerReviewTools(server, client);
     });
   });
 
@@ -105,6 +120,10 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
     ['workday_get_my_profile', {}],
     ['workday_fetch', { path: '2998$43525' }],
     ['workday_graphql', { query: '{ inbox { subject } }' }],
+    ['workday_get_reviews', { worker: '247$42' }],
+    ['workday_get_reviews', { worker: '247$42', review: 'latest' }],
+    ['workday_get_feedback', { worker: '247$42' }],
+    ['workday_get_request_form', { requestType: 'promotion' }],
   ];
 
   it.each(calls)('%s fences its result, markers before the content', async (name, args) => {

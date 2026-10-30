@@ -1,0 +1,130 @@
+{
+  "widget": "root",
+  "title": { "widget": "titleStaticText", "text": "2026 Example Request Form" },
+  "flowExecutionKey": "e1s1",
+  "sessionSecureToken": "SECRET-DO-NOT-LEAK",
+  "body": {
+    "widget": "vbox",
+    "id": "1579",
+    "children": [
+      {
+        "widget": "vbox",
+        "children": [
+          {
+            "widget": "richTextArea",
+            "value": "<p>2026 Example Request Form</p>",
+            "id": "1576/wd:Request_Type_Description"
+          }
+        ]
+      },
+      {
+        "widget": "monikerListInput",
+        "hideAdvice": "ALWAYS",
+        "label": "On Behalf Of",
+        "helpText": "If you want to create this request on behalf of someone else, select the appropriate person based on their role.",
+        "id": "1575"
+      },
+      {
+        "widget": "textAreaInput",
+        "hideAdvice": "ALWAYS",
+        "label": "Describe the Request",
+        "id": "1576/wd:Comment_Text"
+      },
+      {
+        "widget": "panel",
+        "id": "1486",
+        "children": [
+          { "widget": "text", "id": "1486/wd:Questionnaire_Name" },
+          {
+            "widget": "richTextArea",
+            "value": "<p><b>Purpose of this form</b></p><p><br />Explain the recommendation.</p><ul><li>Use specific examples.</li><li>Align with your leader first.</li></ul>",
+            "id": "1486/wd:Questionnaire_Instructions"
+          },
+          {
+            "widget": "editPanelList",
+            "doNotAdd": true,
+            "doNotRemove": true,
+            "rowCount": 3,
+            "id": "1486.346",
+            "minOccurs": 0,
+            "panels": [
+              {
+                "widget": "panel",
+                "id": "1053",
+                "children": [
+                  {
+                    "widget": "richTextArea",
+                    "value": "<p><b>Numerical Employee ID number</b></p><br /><p>Can be found on the individual&#x2019;s Workday Profile.</p> (Required)",
+                    "id": "1053/wd:Question_Body_Rich_Text_concat__Required_"
+                  },
+                  { "widget": "textAreaInput", "id": "1053/wd:Answer_Text" },
+                  { "widget": "dateInput", "hideAdvice": "ALWAYS", "id": "1053/wd:Answer_Date" },
+                  { "widget": "numberInput", "hideAdvice": "ALWAYS", "value": 0, "text": "0", "id": "1053/wd:Answer_Numeric" },
+                  {
+                    "widget": "monikerListSuggestionsInput",
+                    "inputPrompt": { "widget": "monikerListInput", "hideAdvice": "ALWAYS", "id": "1046" },
+                    "suggestionsPrompt": { "widget": "monikerListInput", "id": "1047" }
+                  },
+                  { "widget": "fileUpload2" }
+                ]
+              },
+              {
+                "widget": "panel",
+                "id": "1239",
+                "children": [
+                  {
+                    "widget": "richTextArea",
+                    "value": "<p><b>My manager supports this promotion</b></p> (Required)",
+                    "id": "1239/wd:Question_Body_Rich_Text_concat__Required_"
+                  },
+                  { "widget": "textAreaInput", "hideAdvice": "ALWAYS", "id": "1239/wd:Answer_Text" },
+                  { "widget": "dateInput", "hideAdvice": "ALWAYS", "id": "1239/wd:Answer_Date" },
+                  { "widget": "numberInput", "hideAdvice": "ALWAYS", "value": 0, "text": "0", "id": "1239/wd:Answer_Numeric" },
+                  {
+                    "widget": "radioButtonSelectList",
+                    "instances": [
+                      { "widget": "radioButtonSelectOption", "instanceId": "11431$684", "text": "Yes", "altSortText": "a", "id": "1236.1226" },
+                      { "widget": "radioButtonSelectOption", "instanceId": "11431$685", "text": "No", "altSortText": "b", "id": "1236.1227" }
+                    ],
+                    "instanceCount": 2,
+                    "hideDisplayOption": true,
+                    "presuppliedInstances": true,
+                    "id": "1236"
+                  }
+                ]
+              },
+              {
+                "widget": "panel",
+                "id": "1365",
+                "children": [
+                  {
+                    "widget": "richTextArea",
+                    "value": "<p><b>Organization Impact</b></p><br /><p>If this is a people-manager promotion, describe the scope.</p><p>Consider: number of direct reports.</p>",
+                    "id": "1365/wd:Question_Body_Rich_Text_concat__Required_"
+                  },
+                  { "widget": "textAreaInput", "id": "1365/wd:Answer_Text" },
+                  { "widget": "dateInput", "hideAdvice": "ALWAYS", "id": "1365/wd:Answer_Date" },
+                  { "widget": "numberInput", "hideAdvice": "ALWAYS", "value": 0, "text": "0", "id": "1365/wd:Answer_Numeric" }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "widget": "bpfToolbar",
+        "bpfButtonBar": {
+          "widget": "bpfButtonBar",
+          "required": true,
+          "bpfButtons": [
+            { "widget": "bpfButton", "label": "Submit", "valueIid": "934$20", "buttonClass": 2, "hideExceptions": true },
+            { "widget": "bpfButton", "label": "Save for Later", "valueIid": "934$14", "buttonClass": 1 }
+          ],
+          "id": "1561"
+        },
+        "fileUpload": { "widget": "fileUpload2" },
+        "refreshBpfToolbar": { "widget": "checkBoxInput", "value": false, "text": "", "id": "1570/wd:Refresh_BPF_Toolbar_Only" }
+      }
+    ]
+  }
+}

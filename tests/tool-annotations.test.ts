@@ -6,6 +6,7 @@ import { registerAppsTools } from '../src/tools/apps.js';
 import { registerTaskTools } from '../src/tools/task.js';
 import { registerPeopleTools } from '../src/tools/people.js';
 import { registerRawTools } from '../src/tools/raw.js';
+import { registerReviewTools } from '../src/tools/review.js';
 import type { BridgeProbeResult, BridgeStatus, WorkdayTransport } from '../src/transport.js';
 
 /**
@@ -46,6 +47,7 @@ beforeAll(async () => {
     registerTaskTools(s, client);
     registerPeopleTools(s, client);
     registerRawTools(s, client);
+    registerReviewTools(s, client);
   });
   ann = Object.fromEntries(
     (await harness.client.listTools()).tools.map((t) => [t.name, t.annotations as Ann | undefined]),
@@ -57,7 +59,7 @@ afterAll(async () => {
 
 describe('tool annotations', () => {
   it('covers the full surface (guards against a registrar being dropped here)', () => {
-    expect(Object.keys(ann)).toHaveLength(10);
+    expect(Object.keys(ann)).toHaveLength(14);
   });
 
   it('sets an explicit boolean readOnlyHint on every tool', () => {

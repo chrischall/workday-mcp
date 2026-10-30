@@ -106,6 +106,22 @@
     {
       "name": "workday_graphql",
       "description": "Run a read-only GraphQL query against Workday's PEX surface, with secret/PII fields redacted"
+    },
+    {
+      "name": "workday_get_team",
+      "description": "List the people on the teams you manage, with worker ids, positions and profile links"
+    },
+    {
+      "name": "workday_get_reviews",
+      "description": "List a worker's performance reviews, or open one in full: ratings, manager and employee comments, goals"
+    },
+    {
+      "name": "workday_get_feedback",
+      "description": "Read the feedback a worker has received, given, or requested"
+    },
+    {
+      "name": "workday_get_request_form",
+      "description": "Load a request type's form (e.g. promotion consideration) and list its questions and required fields, without creating a request"
     }
   ]
 }
