@@ -36,7 +36,9 @@ every request rides the user's signed-in `*.myworkday.com` tab.
   never a captured id), `getWorker`/`getWorkerTask`/`getOrgChart`,
   `getTeam`/`getReviews`/`getReview`/`getFeedback`, `getRequestForm`,
   `getInbox` (a JSON API that wants the token from `boot-config`'s `appRoot`,
-  NOT the envelope token), `getMyRequests`, and a
+  NOT the envelope token), `getMyRequests`, `getTeamSnapshot`, the request
+  reads/writes (`listOpenRequests`/`getRequest`/`planRequestUpdate`/
+  `applyRequestUpdate`), and a
   query-only `graphql`. **`getRequestForm` is the one non-GET read**: Workday
   only renders a request's form inside the Create Request flow, so it drives
   that flow with form-urlencoded `postForm` steps and ALWAYS cancels it.
@@ -58,8 +60,13 @@ See `docs/WORKDAY-API.md` for the captured endpoint shapes and the widget schema
 - **TDD.** Failing test → minimal code → green. The parser especially.
 - **Verify the parser against real bytes**, not just synthetic fixtures — the
   `propertyName`-vs-object-key bug only showed up against live data.
-- Reads only the user's own data. Read-only in v1; future writes must be
-  `confirm`-gated with a dry-run `preview()` + re-read verification.
+- Reads only the user's own data. **The one write is `workday_update_request`**
+  (src/tools/requests.ts): `planRequestUpdate` (fresh read → diff → steps,
+  sends nothing) → `confirmWrite` (token bound to request, action, answers,
+  preview and a revision hash of the saved answers) → `applyRequestUpdate`
+  (posts, stops before the commit on any non-changeSummary, then re-reads to
+  verify). Any new write must follow that shape and be added to the explicit
+  write allowlist in tests/tool-annotations.test.ts.
 - Version lives once in `src/version.ts` (`x-release-please-version`); don't
   hand-bump — release-please owns it. `extra-files` in `release-please-config.json`
   must list every version-bearing manifest.

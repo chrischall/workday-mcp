@@ -132,6 +132,30 @@ export function registerReviewTools(server: McpServer, client: WorkdayClient): v
   );
 
   server.registerTool(
+    'workday_get_team_snapshot',
+    {
+      title: 'Snapshot your organization',
+      description: untrustedDescription(
+        'One table of everyone in your organization from the My Team hub\'s associates report — ' +
+          'typically compensation grade, job profile, hire and last-promotion dates, performance ' +
+          'rating and pay. Use it to weigh promotion candidates. Pass `report` to read a different ' +
+          'report on the My Team hub by name. Read-only.'
+      ),
+      annotations: {
+        title: 'Snapshot your organization',
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+      inputSchema: z.object({
+        view: viewArg(),
+        report: z.string().min(1).optional().describe('Report name on the My Team hub (default: the all-associates report).'),
+      }),
+    },
+    async ({ report, view }) => viewResponse(view, await client.getTeamSnapshot(report))
+  );
+
+  server.registerTool(
     'workday_get_inbox',
     {
       title: 'Read your Workday inbox',

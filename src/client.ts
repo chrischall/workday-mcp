@@ -31,12 +31,13 @@ import type {
   FetchResult,
   WorkdayTransport,
 } from './transport.js';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   parseTask,
   parseApps,
   parseFormValues,
   parseQuestionnaire,
+  parseRequestModel,
   parseWizardSections,
   hasSubmitBar,
   type WorkdayTask,
@@ -46,6 +47,8 @@ import {
   type WorkdayFormValue,
   type WorkdayGrid,
   type WorkdayQuestionnaire,
+  type WorkdayQuestion,
+  type WorkdayRequestModel,
   type WorkdayProfileSection,
 } from './parse.js';
 import { isSecretKey, redactTree } from './redact.js';
@@ -236,6 +239,46 @@ export interface WorkdayInboxItem {
 
 export type InboxCategory = 'actions' | 'archive';
 
+/** A request waiting for you to revise (a "Revise Request" inbox task). */
+export interface WorkdayOpenRequest {
+  /** The request's instance id — what `getRequest` / the write tools take. */
+  request: string;
+  title: string;
+  created?: string;
+}
+
+export type RequestAction = 'save' | 'submit';
+
+/** One answer a write will change. `from` is null when unanswered. */
+export interface RequestChange {
+  number: number;
+  question: string;
+  from: string | null;
+  to: string;
+}
+
+/** A write planned against a FRESH read of the request — see `planRequestUpdate`. */
+export interface RequestUpdatePlan {
+  request: string;
+  uri: string;
+  model: WorkdayRequestModel;
+  /** The flow steps, in order, exactly as they will be posted. */
+  steps: Array<Record<string, string>>;
+  /** What the user is asked to confirm. */
+  preview: { request: string; action: RequestAction; changes: RequestChange[] };
+  /** A hash of every saved answer — rotates if the request changes. */
+  revision: string;
+}
+
+export interface RequestUpdateResult {
+  request: string;
+  action: RequestAction;
+  changes: RequestChange[];
+  /** Whether a re-read shows the write took effect. */
+  verified: boolean;
+  verification: string;
+}
+
 const DEFAULT_CRAWL_DEPTH = 1;
 const DEFAULT_MAX_CARDS = 12;
 const DEFAULT_CRAWL_CONCURRENCY = 4;
@@ -383,6 +426,11 @@ function pickByLabel<T>(items: T[], label: (t: T) => string, wanted: string, wha
       ? `"${wanted}" matches more than one ${what}: ${names.join(' | ')}. Use a longer part of the name.`
       : `No ${what} matching "${wanted}". Available: ${names.join(' | ') || '(none)'}.`
   );
+}
+
+/** The instance id in an inbox task uri (`/{t}/inst/<id>/rel-task/...`). */
+function requestIdOf(uri: string): string | undefined {
+  return /\/inst\/([^/]+)\/rel-task\//.exec(uri)?.[1];
 }
 
 /** The Create Request page's request-type prompt: its id names the field in
@@ -1116,6 +1164,225 @@ export class WorkdayClient {
       );
     }
     return token;
+  }
+
+  /**
+   * A one-table snapshot of everyone in your organization from the My Team
+   * hub's associates report — on a typical tenant: grade, job profile, hire
+   * and last-promotion dates, performance rating, pay. The input to a
+   * promotion decision in one call.
+   *
+   * Resolved by LABEL: the My Team hub from your app menu, then the worklet
+   * whose name matches `report` (default: the "all associates" report). Only
+   * that report is fetched — the hub's other worklets are not crawled.
+   */
+  async getTeamSnapshot(
+    report?: string
+  ): Promise<{ report: string; people: Array<Record<string, string>>; incomplete?: { shown: number; total: number } }> {
+    // "My Team Management" first: a bare "My Team" app is often the generic
+    // launcher, which opens an empty shell.
+    const apps = await this.getApps();
+    const hubApp = apps.find((a) => /my team management/i.test(a.label)) ?? apps.find((a) => /my team/i.test(a.label));
+    const hub = await this.openApp(hubApp ? hubApp.label : /my team/i, { depth: 0 });
+    const reports = hub.navigation.filter((n) => n.uri);
+    const hit = report
+      ? pickByLabel(reports, (n) => n.label, report, 'report on the My Team hub')
+      : reports.find((n) => /all associates|associates in my organi[sz]ation/i.test(n.label));
+    if (!hit?.uri) {
+      throw new Error(
+        `No associates report on the My Team hub. Reports there: ${reports.map((n) => n.label).join(' | ') || '(none)'}. ` +
+          'Pass one of them as `report`.'
+      );
+    }
+    const page = await this.getTask(hit.uri);
+    const people = page.grids.flatMap((g) => g.rows.map((r) => r.cells));
+    const total = page.grids.reduce((n, g) => n + (g.totalRowCount ?? g.rows.length), 0);
+    return {
+      report: hit.label,
+      people,
+      ...(total > people.length ? { incomplete: { shown: people.length, total } } : {}),
+    };
+  }
+
+  /** The requests waiting for you to revise: your inbox's "Revise Request"
+   *  tasks, each named by its instance id. */
+  async listOpenRequests(): Promise<WorkdayOpenRequest[]> {
+    const { items } = await this.getInbox('actions');
+    return items
+      .filter((i) => /revise request/i.test(i.task ?? '') && i.uri)
+      .map((i) => ({
+        request: requestIdOf(i.uri as string) ?? (i.uri as string),
+        title: i.title,
+        ...(i.created ? { created: i.created } : {}),
+      }));
+  }
+
+  /** The inbox uri of an open request, by id (or a uri passed through). */
+  private async requestUri(request: string): Promise<string> {
+    const r = request.trim();
+    if (r.startsWith('/')) return this.resolvePath(r);
+    const { items } = await this.getInbox('actions');
+    const open = items.filter((i) => /revise request/i.test(i.task ?? '') && i.uri);
+    const hit = open.find((i) => requestIdOf(i.uri as string) === r);
+    if (!hit?.uri) {
+      throw new Error(
+        `No open request "${r}" in your inbox. Open requests: ` +
+          (open.map((i) => `${requestIdOf(i.uri as string)} (${i.title}, ${i.created ?? 'no date'})`).join(' | ') ||
+            '(none)') +
+          '.'
+      );
+    }
+    return hit.uri;
+  }
+
+  /** Read an open request's questions with their saved answers. A GET. */
+  async getRequest(request: string): Promise<{ request: string; title?: string; questions: WorkdayQuestion[] }> {
+    const uri = await this.requestUri(request);
+    const page = await this.getRedacted(uri);
+    const q = parseQuestionnaire(page);
+    if (!q) throw new Error(`Request "${request}" did not open as a questionnaire.`);
+    return { request: requestIdOf(uri) ?? request, ...(q.title ? { title: q.title } : {}), questions: q.questions };
+  }
+
+  /**
+   * Plan a change to an open request from a FRESH read: resolve each answer
+   * to its question (by number, or a distinctive part of the question text),
+   * validate it (a choice must be one of the offered options; a submit needs
+   * every required question answered), drop answers equal to what is saved,
+   * and lay out the exact flow steps. Sends nothing.
+   *
+   * The `revision` hashes every saved answer, so a confirmation minted for
+   * one state of the request is refused if the request changes before the
+   * write.
+   */
+  async planRequestUpdate(
+    request: string,
+    answers: Record<string, string>,
+    action: RequestAction
+  ): Promise<RequestUpdatePlan> {
+    const uri = await this.requestUri(request);
+    const page = await this.fetchJson(uri);
+    const model = parseRequestModel(page);
+    if (!model) {
+      throw new Error(
+        `Request "${request}" did not open as an editable form (no Submit / Save for Later), so it cannot be changed here.`
+      );
+    }
+    const id = requestIdOf(uri) ?? request;
+    const byNumber = new Map(model.questions.map((q) => [q.number, q]));
+    const changes: RequestChange[] = [];
+    const steps: Array<Record<string, string>> = [];
+    const final = new Map(model.questions.map((q) => [q.number, q.answer]));
+    for (const [key, raw] of Object.entries(answers)) {
+      const q = /^\d+$/.test(key.trim())
+        ? byNumber.get(Number(key))
+        : pickByLabel(model.questions, (x) => x.question, key, 'question');
+      if (!q) throw new Error(`No question ${key} on this request (it has ${model.questions.length}).`);
+      const field = model.fields.find((f) => f.number === q.number);
+      if (!field) throw new Error(`Question ${q.number} ("${q.question}") has no answer field this server can write.`);
+      let to = raw;
+      if (field.kind === 'choice') {
+        const opt = pickByLabel(field.options ?? [], (o) => o.text, raw, `option for "${q.question}"`);
+        to = opt.text;
+        if (to !== (q.answer ?? '')) {
+          steps.push({
+            _eventId_add: field.fieldId,
+            [field.fieldId]: opt.instanceId,
+            [`${opt.instanceId}_DID`]: opt.text,
+            [`${opt.instanceId}_IID`]: opt.instanceId,
+            [`${opt.instanceId}_PV`]: '1',
+            [`${opt.instanceId}_V`]: '1',
+          });
+        }
+      } else if (to !== (q.answer ?? '')) {
+        steps.push({ _eventId_validate: field.fieldId, [field.fieldId]: to });
+      }
+      if (to !== (q.answer ?? '')) {
+        changes.push({ number: q.number, question: q.question, from: q.answer ?? null, to });
+        final.set(q.number, to);
+      }
+    }
+    changes.sort((a, b) => a.number - b.number);
+    if (action === 'save' && !changes.length) {
+      throw new Error('Nothing to save: every answer given already matches what the request has.');
+    }
+    if (action === 'submit') {
+      const missing = model.questions.filter((q) => q.required && !(final.get(q.number) ?? '').trim());
+      if (missing.length) {
+        throw new Error(
+          `Cannot submit: required question(s) unanswered — ${missing.map((q) => `${q.number}. ${q.question}`).join('; ')}.`
+        );
+      }
+    }
+    const button = action === 'submit' ? model.bar.submit : model.bar.save;
+    const label = action === 'submit' ? 'Submit' : 'Save for Later';
+    steps.push({
+      _eventId_add: model.bar.id,
+      [model.bar.id]: button,
+      [`${button}_DID`]: label,
+      [`${button}_IID`]: button,
+    });
+    steps.push({ _eventId_submit: model.pageId });
+    const revision = createHash('sha256')
+      .update(JSON.stringify(model.questions.map((q) => [q.number, q.answer ?? null])))
+      .digest('hex');
+    return { request: id, uri, model, steps, preview: { request: id, action, changes }, revision };
+  }
+
+  /**
+   * Send a planned update: each answer change, then the Save for Later or
+   * Submit button, then the commit — all on the flow the plan just read.
+   * Every step but the commit must come back as a change summary; anything
+   * else stops the write before the commit, so nothing is saved. Then a
+   * re-read verifies it: a save must show the new answers, a submit must
+   * have left your inbox.
+   *
+   * Callers MUST gate this behind `confirmWrite` with the plan's preview and
+   * revision — see `workday_update_request`.
+   */
+  async applyRequestUpdate(plan: RequestUpdatePlan): Promise<RequestUpdateResult> {
+    const flowKey = plan.model.flowKey;
+    const commit = plan.steps[plan.steps.length - 1];
+    for (const step of plan.steps.slice(0, -1)) {
+      let res: unknown;
+      try {
+        res = await this.postForm(`/${this.tenant}/flowController.htmld`, { _flowExecutionKey: flowKey, ...step });
+      } catch (e) {
+        throw new Error(`Workday rejected a change before the commit, so nothing was saved: ${messageOf(e)}`);
+      }
+      if (!res || typeof res !== 'object' || (res as { widget?: unknown }).widget !== 'changeSummary') {
+        throw new Error(
+          'Workday did not accept a change (no change summary came back), so the request was not committed — nothing was saved.'
+        );
+      }
+    }
+    const done = await this.postForm(`/${this.tenant}/flowController.htmld`, { _flowExecutionKey: flowKey, ...commit });
+    if (hasSubmitBar(done)) {
+      throw new Error(
+        'Workday sent the form back instead of accepting it — it likely has a validation error. Open the request in ' +
+          'your browser to see it; check whether anything was saved before retrying.'
+      );
+    }
+    const { request, preview } = plan;
+    let verified = false;
+    let verification: string;
+    if (preview.action === 'submit') {
+      const open = await this.listOpenRequests();
+      verified = !open.some((o) => o.request === request);
+      verification = verified
+        ? 'The request is no longer waiting in your inbox: it was submitted.'
+        : 'The request is STILL in your inbox after Submit — check it in your browser.';
+    } else {
+      const after = await this.getRequest(request);
+      const wrong = preview.changes.filter(
+        (c) => (after.questions.find((q) => q.number === c.number)?.answer ?? '') !== c.to
+      );
+      verified = wrong.length === 0;
+      verification = verified
+        ? 'Re-read the request: every changed answer is saved.'
+        : `Re-read the request: ${wrong.map((c) => `question ${c.number}`).join(', ')} did not read back as saved.`;
+    }
+    return { request, action: preview.action, changes: preview.changes, verified, verification };
   }
 
   /** The requests you created (e.g. promotion consideration forms you

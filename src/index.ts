@@ -28,6 +28,7 @@ import { registerAppsTools } from './tools/apps.js';
 import { registerPeopleTools } from './tools/people.js';
 import { registerRawTools } from './tools/raw.js';
 import { registerReviewTools } from './tools/review.js';
+import { registerRequestTools } from './tools/requests.js';
 import { VERSION } from './version.js';
 
 // Normalized once and shared with the client, so the bridge subdomain and the
@@ -61,6 +62,7 @@ await runMcp({
     (server) => registerPeopleTools(server, client),
     (server) => registerRawTools(server, client),
     (server) => registerReviewTools(server, client),
+    (server) => registerRequestTools(server, client),
   ],
   banner:
     `[workday-mcp] v${VERSION} — WebSocket bridge via @fetchproxy/server on 127.0.0.1:${port ?? 37149}. ` +

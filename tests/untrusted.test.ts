@@ -7,6 +7,7 @@ import { registerPeopleTools } from '../src/tools/people.js';
 import { registerRawTools } from '../src/tools/raw.js';
 import { registerTaskTools } from '../src/tools/task.js';
 import { registerReviewTools } from '../src/tools/review.js';
+import { registerRequestTools } from '../src/tools/requests.js';
 import { WD_UNTRUSTED_NOTE } from '../src/view.js';
 import type {
   BridgeProbeResult,
@@ -57,8 +58,10 @@ const UNTRUSTED_TOOLS = [
   'workday_get_reviews',
   'workday_get_feedback',
   'workday_get_request_form',
+  'workday_get_team_snapshot',
   'workday_get_inbox',
   'workday_get_my_requests',
+  'workday_get_request',
 ] as const;
 
 const TRUSTED_TOOLS = ['workday_get_apps', 'workday_get_org_chart', 'workday_get_team'] as const;
@@ -82,6 +85,8 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
       sections: [{ name: 'Values', values: [{ group: 'Manager Summary', label: 'Comment', value: INJECTION }] }],
     });
     vi.spyOn(client, 'getFeedback').mockResolvedValue({ matched: 'Feedback Received', feedback: [{ Feedback: INJECTION }] });
+    vi.spyOn(client, 'getTeamSnapshot').mockResolvedValue({ report: 'All', people: [{ Name: INJECTION }] });
+    vi.spyOn(client, 'getRequest').mockResolvedValue({ request: '1$1', questions: [{ number: 1, question: INJECTION, required: true, answerType: 'text' }] });
     vi.spyOn(client, 'getInbox').mockResolvedValue({ total: 1, items: [{ title: INJECTION }] });
     vi.spyOn(client, 'getMyRequests').mockResolvedValue({ requests: [{ Request: INJECTION }] });
     vi.spyOn(client, 'getRequestForm').mockResolvedValue({
@@ -94,6 +99,7 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
       registerPeopleTools(server, client);
       registerRawTools(server, client);
       registerReviewTools(server, client);
+      registerRequestTools(server, client);
     });
   });
 
@@ -128,9 +134,11 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
     ['workday_get_reviews', { worker: '247$42', review: 'latest' }],
     ['workday_get_feedback', { worker: '247$42' }],
     ['workday_get_request_form', { requestType: 'promotion' }],
+    ['workday_get_team_snapshot', {}],
     ['workday_get_inbox', {}],
     ['workday_get_inbox', { category: 'archive' }],
     ['workday_get_my_requests', {}],
+    ['workday_get_request', { request: '1$1' }],
   ];
 
   it.each(calls)('%s fences its result, markers before the content', async (name, args) => {
