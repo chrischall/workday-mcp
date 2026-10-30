@@ -62,8 +62,9 @@ export function viewResponse(view: string | undefined, data: unknown): ReturnTyp
  * and appends {@link UNTRUSTED_DESCRIPTION_SUFFIX} to its description.
  *
  * Fenced: get_task, open_app, get_worker, get_worker_task, get_my_profile,
- * fetch, graphql. Not fenced: get_apps (the user's own app menu) and
- * get_org_chart (an assembled record of names/titles), and healthcheck.
+ * fetch, graphql, get_reviews, get_feedback, get_request_form. Not fenced:
+ * get_apps (the user's own app menu), get_org_chart and get_team (assembled
+ * records of names/titles), and healthcheck.
  */
 export const WD_UNTRUSTED_NOTE =
   'Feedback, review and business-process comments, inbox items, job descriptions and any other free text ' +

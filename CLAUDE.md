@@ -33,12 +33,20 @@ every request rides the user's signed-in `*.myworkday.com` tab.
   `.htmld`), error mapping (non-2xx, SSO/sign-in bounce →
   `SessionNotAuthenticatedError`), and the composed reads: `crawl` (hub → child
   cards, bounded by depth/maxCards/visited), `resolveApp`/`openApp` (by LABEL,
-  never a captured id), `getWorker`/`getWorkerTask`/`getOrgChart`, and a
-  query-only `graphql`. **Tenant-specific ids are learned at runtime** — the
+  never a captured id), `getWorker`/`getWorkerTask`/`getOrgChart`,
+  `getTeam`/`getReviews`/`getReview`/`getFeedback`, `getRequestForm`, and a
+  query-only `graphql`. **`getRequestForm` is the one non-GET read**: Workday
+  only renders a request's form inside the Create Request flow, so it drives
+  that flow with form-urlencoded `postForm` steps and ALWAYS cancels it.
+  `_eventId_submit` there is the PROMPT page's OK — the same event on a loaded
+  form submits it, so it is refused once a page carries the `bpfButtonBar`.
+  Never add a step that names a `bpfButton`. **Tenant-specific ids are learned at runtime** — the
   worker-profile uri prefix comes from a live org-chart node, never a constant.
 - `src/transport-fetchproxy.ts` — wraps `@chrischall/mcp-utils/fetchproxy`;
   `splitHost` maps `wd5.myworkday.com` → domain `myworkday.com` + subdomain `wd5`.
 - `src/tools/*.ts` — `registerXxxTools(server, client)` → `server.registerTool`.
+  `review.ts` is the review-season surface (team, reviews, feedback, request
+  forms).
 - `src/index.ts` — wires it with `runMcp`; brings the bridge up before stdio.
 
 See `docs/WORKDAY-API.md` for the captured endpoint shapes and the widget schema.

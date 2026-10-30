@@ -61,6 +61,10 @@ yourself, or check a release zip against the `.sha256` file published beside it
 | `workday_get_worker` | A worker's profile: the **catalog** of everything readable about them (9 sections, ~40 named tasks) |
 | `workday_get_worker_task` | Open one named item from that catalog — "Compensation", "Performance Reviews", "Management Chain" |
 | `workday_get_my_profile` | The same catalog, for yourself |
+| `workday_get_team` | The people on the teams you manage — each with worker id, position, location and profile link |
+| `workday_get_reviews` | A worker's performance reviews (period, rating), or one review in full: manager and employee ratings and comments, goals, development items |
+| `workday_get_feedback` | Feedback a worker received, gave, or requested — author, date, badge and full text |
+| `workday_get_request_form` | A request type's form (e.g. a promotion consideration form): instructions plus every question, required flag, answer type and options. Opens a new request to read it and cancels it before returning, so nothing is created |
 | `workday_fetch` | Raw `.htmld` read with secrets redacted — the escape hatch for pages the parser doesn't model yet |
 | `workday_graphql` | Read-only GraphQL against Workday's PEX surface (mutations refused). The only route to Inbox / search |
 | `workday_healthcheck` | Verify the bridge + session end-to-end with an actionable hint |
@@ -77,6 +81,16 @@ workday_get_org_chart                                   → who reports where, w
 workday_get_worker         { worker: "<profileUri>" }   → that person's full catalog
 workday_get_worker_task    { worker: "…", task: "Compensation" }
 workday_open_app           { app: "talent" }            → a whole app hub, crawled
+```
+
+### Review and promotion season
+
+```
+workday_get_team                                        → your reports, with workerIds
+workday_get_reviews        { worker: "247$42" }         → their review history
+workday_get_reviews        { worker: "247$42", review: "latest" }   → ratings + comments
+workday_get_feedback       { worker: "247$42" }         → feedback received
+workday_get_request_form   { requestType: "promotion consideration" } → the form's questions
 ```
 
 All ids are discovered at runtime from your own app menu and org chart — nothing

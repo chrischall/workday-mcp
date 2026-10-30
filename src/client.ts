@@ -31,13 +31,22 @@ import type {
   FetchResult,
   WorkdayTransport,
 } from './transport.js';
+import { randomUUID } from 'node:crypto';
 import {
   parseTask,
   parseApps,
+  parseFormValues,
+  parseQuestionnaire,
+  parseWizardSections,
+  hasSubmitBar,
   type WorkdayTask,
   type WorkdayApp,
   type WorkdayReference,
   type WorkdayOrgChart,
+  type WorkdayFormValue,
+  type WorkdayGrid,
+  type WorkdayQuestionnaire,
+  type WorkdayProfileSection,
 } from './parse.js';
 import { isSecretKey, redactTree } from './redact.js';
 
@@ -132,6 +141,78 @@ export interface WorkdayCrawlResult extends WorkdayTask {
   /** Child cards that failed, so a partial crawl is still legible. */
   errors?: Array<{ uri: string; error: string }>;
 }
+
+/** One person in a team roster. */
+export interface WorkdayTeamMember {
+  name: string;
+  /** Worker instance id, accepted by every worker tool. */
+  workerId?: string;
+  profileUri?: string;
+  /** The roster's other columns (associate id, position, location, …). */
+  details: Record<string, string>;
+}
+
+/** A supervisory organization you manage, with its members. */
+export interface WorkdayTeamOrg {
+  name: string;
+  id?: string;
+  members: WorkdayTeamMember[];
+  /** Present when Workday paged the roster: only `shown` of `total` came back. */
+  incomplete?: { shown: number; total: number };
+}
+
+export interface WorkdayTeam {
+  organizations: WorkdayTeamOrg[];
+}
+
+/** One performance review in a worker's history. */
+export interface WorkdayReviewSummary {
+  review: string;
+  /** The grid it was listed under ("Completed", "In Progress", …). */
+  status: string;
+  periodStart?: string;
+  periodEnd?: string;
+  rating?: string;
+  /** GET-able printable view of the review. */
+  viewUri?: string;
+}
+
+export interface WorkdayReviewSection {
+  name: string;
+  values: WorkdayFormValue[];
+  grids?: WorkdayGrid[];
+}
+
+export interface WorkdayReview {
+  review: string;
+  periodStart?: string;
+  periodEnd?: string;
+  rating?: string;
+  /** The evaluation the printable view is showing, e.g. "Manager Evaluation: …". */
+  heading?: string;
+  sections: WorkdayReviewSection[];
+}
+
+export type FeedbackKind = 'received' | 'given' | 'requested';
+
+/** The profile task each feedback kind lives under. */
+const FEEDBACK_TASKS: Record<FeedbackKind, string> = {
+  received: 'Feedback Received',
+  given: 'Feedback Given',
+  requested: 'Feedback Requested',
+};
+
+export interface WorkdayRequestForm extends WorkdayQuestionnaire {
+  requestType: string;
+}
+
+/**
+ * Workday's delivered "Create Request" task. Delivered (`2997$`) task ids are
+ * Workday's own, not tenant configuration, so this addresses the same task on
+ * every tenant — and a GET of it opens the request-type prompt without
+ * creating anything.
+ */
+const CREATE_REQUEST_TASK = '2997$12683';
 
 const DEFAULT_CRAWL_DEPTH = 1;
 const DEFAULT_MAX_CARDS = 12;
@@ -230,6 +311,87 @@ export function assertReadOnlyGraphql(query: string): void {
 
 /** Match an app by label: case-insensitive substring, or a RegExp. Returns the
  *  first match in menu order — Workday's own relevance ordering. */
+/** Find a named task in a profile's catalog: an exact label wins, then the
+ *  first label containing it (in catalog order). */
+function findProfileTask(
+  sections: WorkdayProfileSection[],
+  label: string
+): { section: string; task: WorkdayReference } | null {
+  const wanted = label.trim().toLowerCase();
+  const all = sections.flatMap((s) =>
+    s.tasks.filter((t) => t.uri).map((task) => ({ section: s.label, task }))
+  );
+  return (
+    all.find((e) => e.task.label.toLowerCase() === wanted) ??
+    all.find((e) => e.task.label.toLowerCase().includes(wanted)) ??
+    null
+  );
+}
+
+function describeCatalog(sections: WorkdayProfileSection[]): string {
+  return (
+    sections.map((s) => `${s.label}: ${s.tasks.map((t) => t.label).join(', ')}`).join(' | ') ||
+    '(none)'
+  );
+}
+
+/** The first cell whose column label matches, for grids whose column names
+ *  vary slightly between tenants and report versions. */
+function cellMatching(cells: Record<string, string>, pattern: RegExp): string | undefined {
+  const key = Object.keys(cells).find((k) => pattern.test(k));
+  return key ? cells[key] : undefined;
+}
+
+/** `MM/DD/YYYY` (Workday's US rendering) or ISO → sortable time; NaN if neither. */
+function dateValue(s: string | undefined): number {
+  if (!s) return NaN;
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
+  return us ? Date.UTC(+us[3], +us[1] - 1, +us[2]) : Date.parse(s);
+}
+
+/** Pick one entry by label: exact (case-insensitive) beats a partial match,
+ *  and several partial matches are an error that names them. */
+function pickByLabel<T>(items: T[], label: (t: T) => string, wanted: string, what: string): T {
+  const w = wanted.trim().toLowerCase();
+  const exact = items.filter((i) => label(i).toLowerCase() === w);
+  if (exact.length === 1) return exact[0];
+  const partial = items.filter((i) => label(i).toLowerCase().includes(w));
+  if (partial.length === 1) return partial[0];
+  const names = (partial.length ? partial : items).map(label);
+  throw new Error(
+    partial.length
+      ? `"${wanted}" matches more than one ${what}: ${names.join(' | ')}. Use a longer part of the name.`
+      : `No ${what} matching "${wanted}". Available: ${names.join(' | ') || '(none)'}.`
+  );
+}
+
+/** The Create Request page's request-type prompt: its id names the field in
+ *  the flow POSTs, its contextId addresses the prompt-search endpoint. */
+function parseTypeInput(page: Record<string, unknown>): { id: string; contextId: string } | null {
+  let hit: { id: string; contextId: string } | null = null;
+  const walk = (node: unknown, depth: number): void => {
+    if (hit || depth > 40 || !node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const n of node) walk(n, depth + 1);
+      return;
+    }
+    const o = node as Record<string, unknown>;
+    if (
+      o.widget === 'monikerListInput' &&
+      typeof o.label === 'string' &&
+      /request type/i.test(o.label) &&
+      typeof o.id === 'string' &&
+      typeof o.contextId === 'string'
+    ) {
+      hit = { id: o.id, contextId: o.contextId };
+      return;
+    }
+    for (const v of Object.values(o)) walk(v, depth + 1);
+  };
+  walk(page.body, 0);
+  return hit;
+}
+
 function matchApp(apps: WorkdayApp[], match: string | RegExp): WorkdayApp | null {
   const test =
     typeof match === 'string'
@@ -596,27 +758,273 @@ export class WorkdayClient {
     taskLabel: string
   ): Promise<{ matched: string; section: string; uri: string; task: WorkdayTask }> {
     const profilePage = await this.getWorker(idOrUri);
+    return this.openProfileTask(profilePage, taskLabel, "this worker's profile");
+  }
+
+  /** Open one named task from an already-fetched profile page (a worker's or
+   *  an organization's — both are `compositeView` catalogs). */
+  private async openProfileTask(
+    profilePage: WorkdayTask,
+    taskLabel: string,
+    where: string
+  ): Promise<{ matched: string; section: string; uri: string; task: WorkdayTask }> {
     const sections = profilePage.profile?.sections ?? [];
-    const wanted = taskLabel.trim().toLowerCase();
-    for (const section of sections) {
-      for (const task of section.tasks) {
-        if (task.label.toLowerCase() === wanted || task.label.toLowerCase().includes(wanted)) {
-          if (!task.uri) continue;
-          return {
-            matched: task.label,
-            section: section.label,
-            uri: task.uri,
-            task: await this.getTask(task.uri),
-          };
-        }
+    const hit = findProfileTask(sections, taskLabel);
+    if (!hit) {
+      throw new Error(
+        `No task matching "${taskLabel}" on ${where}. Available — ${describeCatalog(sections)}`
+      );
+    }
+    const uri = hit.task.uri as string;
+    return { matched: hit.task.label, section: hit.section, uri, task: await this.getTask(uri) };
+  }
+
+  /**
+   * The teams you manage: every SUPERVISORY organization you lead, with its
+   * members.
+   *
+   * The org chart cannot do this — expanding it downward is a POST-only
+   * navigation. Instead this follows plain GETs, each matched by LABEL so no
+   * tenant id is assumed: your profile → "Organizations" → the "Manager/Leader
+   * of These Organizations" grid → each supervisory org's own profile →
+   * "Members".
+   */
+  async getTeam(): Promise<WorkdayTeam> {
+    const me = await this.getMyProfile();
+    const orgs = await this.openProfileTask(me, 'Organizations', 'your profile');
+    const led = orgs.task.grids.find((g) => /manager|leader/i.test(g.label));
+    const supervisory = (led?.rows ?? []).filter((row) => {
+      const type = cellMatching(row.cells, /type/i);
+      return type === undefined || /supervisory/i.test(type);
+    });
+    if (!supervisory.length) {
+      throw new Error(
+        'You do not manage any supervisory organization in Workday (your profile\'s ' +
+          '"Organizations" lists no supervisory org under "Manager/Leader of"), so there is no ' +
+          'team to list. Use `workday_get_org_chart` to see your reporting chain instead.'
+      );
+    }
+    const organizations: WorkdayTeamOrg[] = [];
+    for (const row of supervisory) {
+      // Take the reference that IS the "Organization" cell. Matching on the
+      // reference's label is not enough: live cells are labelled by column,
+      // and "Organization Role" (a link to the role "Manager") matches too.
+      const name = cellMatching(row.cells, /^organization$/i);
+      const ref = row.references.find((r) => r.uri && name !== undefined && r.value === name);
+      if (!name || !ref?.uri) continue;
+      const orgPage = await this.getTask(ref.uri);
+      const membersPage = await this.openProfileTask(orgPage, 'Members', `the "${name}" organization`);
+      const grid = membersPage.task.grids.find((g) => /member/i.test(g.label)) ?? membersPage.task.grids[0];
+      const members: WorkdayTeamMember[] = (grid?.rows ?? []).map((r) => {
+        const primary =
+          Object.keys(r.cells).find((k) => /^(associate|worker|employee|name)$/i.test(k)) ??
+          Object.keys(r.cells)[0] ??
+          '';
+        const person = r.references.find((x) => x.instanceId && x.value === r.cells[primary]);
+        const details = Object.fromEntries(Object.entries(r.cells).filter(([k]) => k !== primary));
+        return {
+          name: r.cells[primary] ?? person?.value ?? '',
+          ...(person?.instanceId ? { workerId: person.instanceId } : {}),
+          ...(person?.uri ? { profileUri: this.resolvePath(person.uri) } : {}),
+          details,
+        };
+      });
+      const shown = grid?.rows.length ?? 0;
+      const total = grid?.totalRowCount;
+      organizations.push({
+        name,
+        ...(ref.instanceId ? { id: ref.instanceId } : {}),
+        members,
+        ...(total !== undefined && total > shown ? { incomplete: { shown, total } } : {}),
+      });
+    }
+    return { organizations };
+  }
+
+  /** A worker's performance-review history (newest first, as Workday lists it). */
+  async getReviews(worker: string): Promise<{ reviews: WorkdayReviewSummary[] }> {
+    const page = await this.getWorkerTask(worker, 'Performance Reviews');
+    const reviews: WorkdayReviewSummary[] = [];
+    for (const grid of page.task.grids) {
+      for (const row of grid.rows) {
+        const review = cellMatching(row.cells, /^review$/i);
+        if (!review) continue;
+        const periodStart = cellMatching(row.cells, /start/i);
+        const periodEnd = cellMatching(row.cells, /end date|period end/i);
+        const rating = cellMatching(row.cells, /rating/i);
+        // The row action column ("View Review"). Anchored: the "Review"
+        // column's own link would match a bare /view/.
+        const view = row.references.find((r) => /^view\b/i.test(r.label) && r.uri);
+        reviews.push({
+          review,
+          status: grid.label,
+          ...(periodStart ? { periodStart } : {}),
+          ...(periodEnd ? { periodEnd } : {}),
+          ...(rating ? { rating } : {}),
+          ...(view?.uri ? { viewUri: view.uri } : {}),
+        });
       }
     }
-    const available = sections
-      .map((s) => `${s.label}: ${s.tasks.map((t) => t.label).join(', ')}`)
-      .join(' | ');
-    throw new Error(
-      `No task matching "${taskLabel}" on this worker's profile. Available — ${available || '(none)'}`
-    );
+    return { reviews };
+  }
+
+  /**
+   * Read one review in full: every section's ratings and comments (manager
+   * and employee), goals, and development items.
+   *
+   * `which` is part of the review's name ("2025 year-end") or `latest`. The
+   * review's printable view is a task wizard whose sections are each a
+   * GET-able page; they are read in turn.
+   */
+  async getReview(worker: string, which: string): Promise<WorkdayReview> {
+    const { reviews } = await this.getReviews(worker);
+    const viewable = reviews.filter((r) => r.viewUri);
+    let summary: WorkdayReviewSummary;
+    if (which.trim().toLowerCase() === 'latest') {
+      if (!viewable.length) throw new Error('This worker has no performance review you can view.');
+      summary = viewable.reduce((best, r) =>
+        dateValue(r.periodEnd) > dateValue(best.periodEnd) ? r : best
+      );
+    } else {
+      summary = pickByLabel(viewable, (r) => r.review, which, 'review');
+    }
+    const wizard = await this.getRedacted(summary.viewUri as string);
+    const sectionRefs = parseWizardSections(wizard);
+    const heading = parseTask(wizard)
+      .sections.flatMap((s) => s.references)
+      .find((r) => r.label === 'Sub-Heading Instance')?.value;
+    const pages = sectionRefs.length
+      ? await mapWithConcurrency(sectionRefs, 3, async (ref) => ({
+          name: ref.label,
+          page: await this.getRedacted(ref.uri),
+        }))
+      : [{ name: summary.review, page: wizard }];
+    const sections = pages.map(({ name, page }) => {
+      const grids = parseTask(page).grids.filter((g) => g.rows.length);
+      return { name, values: parseFormValues(page), ...(grids.length ? { grids } : {}) };
+    });
+    return {
+      review: summary.review,
+      ...(summary.periodStart ? { periodStart: summary.periodStart } : {}),
+      ...(summary.periodEnd ? { periodEnd: summary.periodEnd } : {}),
+      ...(summary.rating ? { rating: summary.rating } : {}),
+      ...(heading ? { heading } : {}),
+      sections,
+    };
+  }
+
+  /** Feedback a worker received, gave, or requested, one row per item. */
+  async getFeedback(
+    worker: string,
+    kind: FeedbackKind = 'received'
+  ): Promise<{ matched: string; feedback: Array<Record<string, string>>; incomplete?: { shown: number; total: number } }> {
+    const page = await this.getWorkerTask(worker, FEEDBACK_TASKS[kind]);
+    const rows = page.task.grids.flatMap((g) => g.rows.map((r) => r.cells));
+    const shown = page.task.grids.reduce((n, g) => n + g.rows.length, 0);
+    const total = page.task.grids.reduce((n, g) => n + (g.totalRowCount ?? g.rows.length), 0);
+    return {
+      matched: page.matched,
+      feedback: rows,
+      ...(total > shown ? { incomplete: { shown, total } } : {}),
+    };
+  }
+
+  /**
+   * Load the form of a Workday REQUEST type (e.g. a promotion consideration
+   * form) and return its questions — without creating a request.
+   *
+   * Workday renders a request's form only inside the "Create Request" flow,
+   * so this drives that flow the way the UI does and then abandons it:
+   *
+   *   1. GET the Create Request task — opens the request-type prompt.
+   *   2. POST a prompt search for `requestType`.
+   *   3. POST the chosen type into the prompt (`_eventId_add`).
+   *   4. POST the prompt's OK (`_eventId_submit` on the PROMPT page).
+   *   5. ALWAYS POST `_eventId_cancel`, whatever happened above.
+   *
+   * Nothing is saved until a form's own Submit / Save for Later is pressed,
+   * and this never sends either: step 4 is refused if the current page
+   * already carries the business-process Submit bar, and no step ever names a
+   * button from that bar. Verified live: the abandoned flow leaves nothing
+   * under "My Requests" or "Requests In Progress".
+   */
+  async getRequestForm(requestType: string): Promise<WorkdayRequestForm> {
+    const prompt = (await this.fetchJson(`/${this.tenant}/task/${CREATE_REQUEST_TASK}.htmld`)) as Record<
+      string,
+      unknown
+    >;
+    const flowKey = typeof prompt.flowExecutionKey === 'string' ? prompt.flowExecutionKey : undefined;
+    const body = (prompt.body ?? {}) as Record<string, unknown>;
+    const okId = typeof body.id === 'string' ? body.id : undefined;
+    const typeInput = parseTypeInput(prompt);
+    if (!flowKey || !okId || !typeInput || hasSubmitBar(prompt)) {
+      if (flowKey) await this.cancelFlow(flowKey);
+      throw new Error(
+        'Workday\'s Create Request task did not open its request-type prompt, so the form cannot ' +
+          'be loaded safely. Open "Create Request" in your browser to check you can create requests.'
+      );
+    }
+    try {
+      const found = (await this.postForm(
+        `/${this.tenant}/prompt/${typeInput.contextId}/${typeInput.id}.htmld`,
+        { _flowExecutionKey: flowKey, _eventId_prompt: typeInput.id, q: requestType }
+      )) as { items?: Array<{ instanceId?: string; text?: string }> };
+      const items = (found.items ?? []).filter(
+        (i): i is { instanceId: string; text: string } => !!i.instanceId && !!i.text
+      );
+      if (!items.length) {
+        throw new Error(
+          `No request type matching "${requestType}" that you can create. Use a distinctive part ` +
+            'of the name as it appears under Requests → Create Request.'
+        );
+      }
+      const pick = pickByLabel(items, (i) => i.text, requestType, 'request type');
+      const iid = pick.instanceId;
+      await this.postForm(`/${this.tenant}/flowController.htmld`, {
+        _flowExecutionKey: flowKey,
+        _eventId_add: typeInput.id,
+        [typeInput.id]: iid,
+        [`${iid}_DID`]: pick.text,
+        [`${iid}_IID`]: iid,
+        [`${iid}_PV`]: '1',
+        [`${iid}_V`]: '1',
+      });
+      // The prompt's OK. Safe ONLY because the page it confirms is the prompt
+      // checked above — the same event on a loaded form would submit it.
+      const form = await this.postForm(`/${this.tenant}/flowController.htmld`, {
+        _flowExecutionKey: flowKey,
+        _eventId_submit: okId,
+      });
+      const questionnaire = parseQuestionnaire(redactTree(form, { maxDepth: TYPED_REDACT_MAX_DEPTH }));
+      if (!questionnaire) {
+        throw new Error(
+          `The "${pick.text}" request opened, but its form is not a questionnaire this server can ` +
+            'read. Open it from Requests → Create Request in your browser.'
+        );
+      }
+      return { requestType: pick.text, ...questionnaire };
+    } finally {
+      await this.cancelFlow(flowKey);
+    }
+  }
+
+  /** Abandon a flow. Best effort: a failure here must not mask the result. */
+  private async cancelFlow(flowKey: string): Promise<void> {
+    try {
+      await this.postForm(`/${this.tenant}/flowController.htmld`, {
+        _flowExecutionKey: flowKey,
+        _eventId_cancel: 'Cancel',
+      });
+    } catch {
+      // The flow expires with the page context anyway.
+    }
+  }
+
+  /** GET a page and return it redacted but unparsed, for the readers that
+   *  need widgets `parseTask` does not keep (form values, wizard sections). */
+  private async getRedacted(path: string): Promise<unknown> {
+    const json = await this.fetchJson(this.resolvePath(path));
+    return redactTree(json, { maxDepth: TYPED_REDACT_MAX_DEPTH });
   }
 
   /**
@@ -671,6 +1079,49 @@ export class WorkdayClient {
       throw new Error(
         `Workday POST ${path} returned a non-JSON body (${(e as Error).message}).`
       );
+    }
+  }
+
+  /**
+   * POST one step of a Workday UI flow (`flowController`, a prompt search):
+   * a form-urlencoded body carrying the session token, exactly as the web app
+   * sends it. The token rides in the body and the `Session-Secure-Token`
+   * header and never leaves this method.
+   *
+   * Never retried: a flow step moves server-side flow state, so re-sending it
+   * after a bridge timeout could apply it twice.
+   */
+  private async postForm(path: string, params: Record<string, string>): Promise<unknown> {
+    await this.primeSessionToken();
+    const token = this.sessionSecureToken;
+    if (!token) {
+      throw new Error(
+        'Workday did not hand out a session token, so this step cannot be sent. Reload your ' +
+          'Workday tab and retry.'
+      );
+    }
+    const result = await this.transport.fetch({
+      path,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+        'Session-Secure-Token': token,
+      },
+      body: new URLSearchParams({
+        ...params,
+        sessionSecureToken: token,
+        clientRequestID: randomUUID().replace(/-/g, ''),
+      }).toString(),
+    });
+    this.throwIfNotOk(result, 'POST', path);
+    this.throwIfSignedOut(result);
+    try {
+      const json = JSON.parse(stripJsonGuard(result.body));
+      this.rememberSessionToken(json);
+      return json;
+    } catch (e) {
+      throw new Error(`Workday POST ${path} returned a non-JSON body (${(e as Error).message}).`);
     }
   }
 

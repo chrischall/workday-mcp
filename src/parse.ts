@@ -197,6 +197,43 @@ function str(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined;
 }
 
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+};
+
+/**
+ * Workday rich text (review comments, feedback, questionnaire prompts) as
+ * readable plain text. Block ends become newlines, list items become `- `
+ * bullets, and entities — including the `&#xa;` newline Workday appends to
+ * business-process comments — are decoded.
+ */
+export function stripHtml(html: string): string {
+  const text = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '- ')
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&([a-z]+);/gi, (m, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? m)
+    // Workday labels a blank field "&nbsp" — no semicolon.
+    .replace(/&nbsp(?![a-z;])/gi, ' ');
+  return text
+    .split('\n')
+    .map((line) => line.replace(/[ \t ]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// Widgets whose `value` is rich-text HTML rather than display text.
+const RICH_TEXT_WIDGETS = new Set(['richTextArea', 'compactRichTextArea', 'richTextAreaInput']);
+
 /**
  * Resolve a Workday uri template against an instance id.
  *
@@ -318,6 +355,12 @@ function cellText(col: Obj): string | undefined {
       if (texts.length) return texts.join(', ');
     }
     return undefined;
+  }
+  // Feedback and comment columns arrive as HTML; read them as the text a
+  // person would see.
+  if (widget && RICH_TEXT_WIDGETS.has(widget)) {
+    const html = str(col.value);
+    return html ? stripHtml(html) || undefined : undefined;
   }
   // `text` and any unrecognized widget: take whichever scalar it carries.
   return str(col.value) ?? str(col.text);
@@ -562,16 +605,26 @@ function findWidgets(node: unknown, kind: string, depth = 0, out: Obj[] = []): O
  * team as the whole team.
  */
 function parseGrid(grid: Obj): WorkdayGrid {
-  const columnsRaw = Array.isArray(grid.columns) ? grid.columns : [];
   const idToLabel = new Map<string, string>();
   const columns: string[] = [];
-  for (const col of columnsRaw) {
-    if (!isObj(col)) continue;
-    const id = str(col.columnId);
-    const label = str(col.label) ?? id ?? '';
-    if (id) idToLabel.set(id, label);
-    columns.push(label);
-  }
+  // A `columnGroup` is a header spanning several columns, not a column: its
+  // own `columns` carry the ids the cells are keyed by (live "View Feedback
+  // Received" nests Feedback and Badge this way).
+  const addColumns = (list: unknown, depth: number): void => {
+    if (!Array.isArray(list) || depth > 5) return;
+    for (const col of list) {
+      if (!isObj(col)) continue;
+      if (Array.isArray(col.columns)) {
+        addColumns(col.columns, depth + 1);
+        continue;
+      }
+      const id = str(col.columnId);
+      const label = str(col.label) ?? id ?? '';
+      if (id) idToLabel.set(id, label);
+      columns.push(label);
+    }
+  };
+  addColumns(grid.columns, 0);
   const rows: WorkdayRow[] = [];
   const rowsRaw = Array.isArray(grid.rows) ? grid.rows : [];
   for (const row of rowsRaw) {
@@ -594,6 +647,18 @@ function parseGrid(grid: Obj): WorkdayGrid {
       const widget = str(cell.widget);
       if (widget === 'moniker' || widget === 'monikerList' || widget === 'link') {
         collectReferences(cell, acc);
+      }
+      // A row action ("View" on a performance review) is a plain GET-able
+      // drill-in. Name it by its column: the button text alone is just "View".
+      // Only DATA endpoints qualify — a sibling "Create Review PDF" button
+      // points at `/button/...`, a command, and must never read as a link.
+      if (widget === 'commandButton') {
+        const raw = str(cell.uri);
+        const uri = raw && isDataEndpoint(raw) ? ensureHtmld(raw) : undefined;
+        if (uri) {
+          const text = str(cell.label);
+          acc.references.push({ label, ...(text ? { value: text } : {}), uri });
+        }
       }
     }
     if (Object.keys(cells).length || acc.references.length) {
@@ -1005,4 +1070,273 @@ export function parseTask(root: unknown): WorkdayTask {
   const exp = parseExport(root);
   if (exp) task.export = exp;
   return task;
+}
+
+/** The page title, which arrives as a string on data cards and as a
+ *  `{ text, widget }` title widget on task pages. */
+function pageTitle(root: Obj): string | undefined {
+  return str(root.title) ?? (isObj(root.title) ? str(root.title.text) : undefined);
+}
+
+/** Workday's marker for an input the form does not show. Questionnaires carry
+ *  a text, a date AND a number input for every question and hide all but the
+ *  one that question uses. */
+function isHidden(node: Obj): boolean {
+  return node.hideAdvice === 'ALWAYS';
+}
+
+/** Display texts of the options a select widget has selected. Workday names
+ *  the selection by option `id` in `selectedIds`, not by a flag on the option. */
+function selectedOptionTexts(node: Obj): string[] {
+  const selected = Array.isArray(node.selectedIds) ? node.selectedIds.filter((s) => typeof s === 'string') : [];
+  if (!selected.length || !Array.isArray(node.instances)) return [];
+  return node.instances
+    .filter((o): o is Obj => isObj(o) && selected.includes(str(o.id) ?? ''))
+    .map((o) => str(o.text) ?? '')
+    .filter(Boolean);
+}
+
+function instanceTexts(node: Obj): string[] {
+  if (!Array.isArray(node.instances)) return [];
+  return node.instances
+    .map((i) => (isObj(i) ? str(i.text) : undefined))
+    .filter((t): t is string => !!t);
+}
+
+/** One filled-in value on a read-only form page (a review section, say). */
+export interface WorkdayFormValue {
+  /** Nearest labelled panel ("Manager Summary"), else the page title. */
+  group: string;
+  /** 1-based position when the value sits in a repeating list (one goal of
+   *  many, one belief of many). */
+  item?: number;
+  label: string;
+  value: string;
+}
+
+const TEXT_VALUE_WIDGETS = new Set(['text', 'date', 'dateInput', 'textInput', 'textAreaInput']);
+const NUMBER_WIDGETS = new Set(['number', 'numberInput', 'currency', 'currencyInput']);
+const SELECT_WIDGETS = new Set(['dropDownSelectList', 'radioButtonSelectList', 'checkBoxSelectList']);
+
+/** Read one leaf widget's display value, or undefined when it holds none. */
+function formValueOf(node: Obj, widget: string): string | undefined {
+  if (RICH_TEXT_WIDGETS.has(widget)) {
+    const html = str(node.value);
+    return html ? stripHtml(html) || undefined : undefined;
+  }
+  if (TEXT_VALUE_WIDGETS.has(widget)) {
+    const v = str(node.value)?.trim();
+    return v || undefined;
+  }
+  if (NUMBER_WIDGETS.has(widget)) {
+    // Workday renders an empty numeric field as 0 (every questionnaire
+    // question carries a hidden `Answer_Numeric` of 0, every review section a
+    // zero "Weighting"), so a zero reads as "not filled in", not as data.
+    const v = node.value;
+    if (typeof v === 'number') return v === 0 ? undefined : String(v);
+    const s = str(v)?.trim();
+    return s && Number(s) !== 0 ? s : undefined;
+  }
+  if (SELECT_WIDGETS.has(widget)) {
+    const texts = selectedOptionTexts(node);
+    return texts.length ? texts.join(', ') : undefined;
+  }
+  if (widget === 'monikerListInput' || widget === 'monikerList') {
+    const texts = instanceTexts(node);
+    return texts.length ? texts.join(', ') : undefined;
+  }
+  if (widget === 'checkBoxInput') {
+    return node.value === true ? 'Yes' : undefined;
+  }
+  return undefined;
+}
+
+const FORM_VALUE_WIDGETS = new Set([
+  ...RICH_TEXT_WIDGETS,
+  ...TEXT_VALUE_WIDGETS,
+  ...NUMBER_WIDGETS,
+  ...SELECT_WIDGETS,
+  'monikerListInput',
+  'monikerList',
+  'checkBoxInput',
+]);
+
+/**
+ * Read the filled-in values of a form-style page.
+ *
+ * A performance review's sections come back as the same EDIT widgets the
+ * reviewer typed into — `richTextAreaInput` comments, `dropDownSelectList`
+ * ratings — so the prompt reader would call them empty inputs and the flat
+ * reader (text widgets only) would drop them. This reads each control's
+ * CURRENT value, grouped under its panel heading. Grids are left to
+ * `parseTask`; the "Save for Later" toggle and empty defaults are skipped.
+ */
+export function parseFormValues(root: unknown): WorkdayFormValue[] {
+  if (!isObj(root) || !isObj(root.body)) return [];
+  const out: WorkdayFormValue[] = [];
+  const walk = (node: unknown, group: string, item: number | undefined, depth: number): void => {
+    if (depth > 60) return;
+    if (Array.isArray(node)) {
+      for (const n of node) walk(n, group, item, depth + 1);
+      return;
+    }
+    if (!isObj(node)) return;
+    const widget = str(node.widget);
+    if (widget && (STRUCTURED_WIDGETS.has(widget) || widget === 'titleStaticText')) return;
+    if (widget && isHidden(node)) return;
+    if (widget === 'editPanelList' && Array.isArray(node.panels)) {
+      node.panels.forEach((panel, i) => walk(panel, group, i + 1, depth + 1));
+      return;
+    }
+    if (widget && FORM_VALUE_WIDGETS.has(widget)) {
+      const label = stripHtml(str(node.label) ?? '');
+      if (widget === 'checkBoxInput' && label === 'Save for Later') return;
+      const value = formValueOf(node, widget);
+      if (value !== undefined) {
+        out.push({ group, ...(item !== undefined ? { item } : {}), label, value });
+      }
+      return;
+    }
+    let nextGroup = group;
+    if (widget === 'panel' || widget === 'fieldSet') {
+      const heading =
+        str(node.label) ?? (isObj(node.title) ? str(node.title.text) ?? str(node.title.label) : undefined);
+      if (heading && stripHtml(heading)) nextGroup = stripHtml(heading);
+    }
+    for (const [k, v] of Object.entries(node)) {
+      if (k === 'widget' || k === 'title') continue;
+      walk(v, nextGroup, item, depth + 1);
+    }
+  };
+  walk(root.body, pageTitle(root) ?? 'Details', undefined, 0);
+  return out;
+}
+
+/** One section of a task wizard (a printable review's "Goals", "Values", …). */
+export interface WorkdayWizardSection {
+  label: string;
+  uri: string;
+}
+
+/** List a task wizard's sections, each a GET-able page of its own. */
+export function parseWizardSections(root: unknown): WorkdayWizardSection[] {
+  if (!isObj(root) || !isObj(root.body)) return [];
+  const out: WorkdayWizardSection[] = [];
+  for (const sec of findWidgets(root.body, 'taskWizardSection')) {
+    const uri = ensureHtmld(str(sec.uri));
+    if (!uri) continue;
+    out.push({ label: str(sec.taskName) ?? str(sec.label) ?? '', uri });
+  }
+  return out;
+}
+
+/** True when a page carries the business-process Submit / Save for Later bar,
+ *  i.e. it is a loaded form whose submit event would CREATE something. */
+export function hasSubmitBar(root: unknown): boolean {
+  if (!isObj(root) || !isObj(root.body)) return false;
+  return (
+    findWidgets(root.body, 'bpfButtonBar').length > 0 ||
+    findWidgets(root.body, 'bpfButton').length > 0
+  );
+}
+
+export type QuestionAnswerType =
+  | 'text'
+  | 'date'
+  | 'number'
+  | 'choice'
+  | 'multiple-choice'
+  | 'selection'
+  | 'unknown';
+
+export interface WorkdayQuestion {
+  number: number;
+  question: string;
+  help?: string;
+  required: boolean;
+  answerType: QuestionAnswerType;
+  options?: string[];
+}
+
+export interface WorkdayQuestionnaire {
+  title?: string;
+  instructions?: string;
+  questions: WorkdayQuestion[];
+}
+
+const ANSWER_TYPES: Array<[string, QuestionAnswerType]> = [
+  ['radioButtonSelectList', 'choice'],
+  ['dropDownSelectList', 'choice'],
+  ['checkBoxSelectList', 'multiple-choice'],
+  ['textAreaInput', 'text'],
+  ['textInput', 'text'],
+  ['richTextAreaInput', 'text'],
+  ['dateInput', 'date'],
+  ['numberInput', 'number'],
+  ['monikerListInput', 'selection'],
+];
+
+/** Split a question's rich text into its bold title, help text, and the
+ *  "(Required)" marker Workday appends to the prompt itself. */
+function splitQuestion(html: string): { question: string; help?: string; required: boolean } {
+  const bold = /<b>([\s\S]*?)<\/b>/i.exec(html);
+  const text = stripHtml(html);
+  const required = /\(Required\)\s*$/.test(text);
+  const body = text.replace(/\s*\(Required\)\s*$/, '');
+  const lines = body.split('\n').filter((l) => l.trim());
+  const question = bold ? stripHtml(bold[1]) : (lines[0] ?? '');
+  const rest = bold ? lines.filter((l, i) => !(i === 0 && l === question)) : lines.slice(1);
+  const help = rest.join('\n').trim();
+  return { question, ...(help ? { help } : {}), required };
+}
+
+/**
+ * Parse a Workday questionnaire (a Request's form, e.g. a promotion
+ * consideration form) into its questions.
+ *
+ * Each question is a panel holding a `Question_Body` rich-text prompt plus
+ * one answer control per possible type — text, date, number — with every
+ * control but the one this question uses hidden (`hideAdvice: ALWAYS`).
+ * "Required" is not a flag: it is appended to the prompt text.
+ */
+export function parseQuestionnaire(root: unknown): WorkdayQuestionnaire | undefined {
+  if (!isObj(root) || !isObj(root.body)) return undefined;
+  const questions: WorkdayQuestion[] = [];
+  for (const panel of findWidgets(root.body, 'panel')) {
+    const children = Array.isArray(panel.children) ? panel.children.filter(isObj) : [];
+    const prompt = children.find(
+      (c) => str(c.widget) === 'richTextArea' && /Question_Body/.test(str(c.id) ?? '')
+    );
+    if (!prompt) continue;
+    const { question, help, required } = splitQuestion(str(prompt.value) ?? '');
+    const visible = children.filter((c) => c !== prompt && !isHidden(c));
+    let answerType: QuestionAnswerType = 'unknown';
+    let options: string[] | undefined;
+    for (const [widget, type] of ANSWER_TYPES) {
+      const control = visible.find((c) => str(c.widget) === widget);
+      if (!control) continue;
+      answerType = type;
+      if (type === 'choice' || type === 'multiple-choice') options = instanceTexts(control);
+      break;
+    }
+    questions.push({
+      number: questions.length + 1,
+      question,
+      ...(help ? { help } : {}),
+      required,
+      answerType,
+      ...(options?.length ? { options } : {}),
+    });
+  }
+  if (!questions.length) return undefined;
+  const instructionsNode = findWidgets(root.body, 'richTextArea').find((n) =>
+    /Questionnaire_Instructions/.test(str(n.id) ?? '')
+  );
+  const instructions = instructionsNode ? stripHtml(str(instructionsNode.value) ?? '') : '';
+  const title = pageTitle(root);
+  return {
+    ...(title ? { title } : {}),
+    ...(instructions ? { instructions } : {}),
+    questions,
+  };
 }

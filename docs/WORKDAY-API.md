@@ -162,6 +162,62 @@ lists the parameters rather than reporting an empty page.
   container, so the query parameter is not one of these (results are likely
   fetched by a separate POST). `searchScopesUri` (`/search-scopes.xml`) 404s.
 
+## Review and promotion season (captured 2026-10)
+
+All plain GETs unless noted, and every hop is matched by LABEL:
+
+- **Your team.** Org-chart expansion downward is POST-only (below), but your own
+  profile's **"Organizations"** task has a grid **"Manager/Leader of These
+  Organizations"** (columns Organization Role / Type / Organization). Each
+  `Supervisory` row's Organization moniker opens the org's own `compositeView`
+  profile, whose **"Members"** task is a grid of Associate monikers
+  (`247$…` worker ids with concrete profile uris) plus Associate ID, Position,
+  Email, Phone, Location. Grid cells are LABELLED by their column, so
+  "Organization Role" matches a naive `/organization/` — pick the reference
+  whose text equals the "Organization" cell.
+- **Performance reviews.** Profile → "Performance Reviews" is a grid per status
+  ("Completed", …): Review moniker, period start/end, Manager Rating, and two
+  `commandButton` cells — **"View Review"** (`/inst/<review>/rel-task/2997$1498`,
+  a GET) and "Create Review PDF" (`/button/...`, a command — never follow it).
+- **A review's contents.** "View Printable Employee Review" is a `taskWizard`;
+  each `taskWizardSection.uri` (`/task-wizard/<ctx>/<taskId>/context/<id>`) is
+  GET-able. Sections hold the reviewer's EDIT widgets with their current
+  values: `richTextAreaInput` comments, `dropDownSelectList` ratings (the
+  selection is `selectedIds` → option `id`, not a flag on the option), panels
+  "Manager Summary" / "Employee Summary", and `editPanelList.panels` for
+  repeating goals and beliefs. Empty numerics arrive as `0`.
+- **Feedback.** Profile → "View Feedback Received" is a grid whose Feedback and
+  Badge columns sit inside a **`columnGroup`** — its own `columns` carry the
+  ids the cells are keyed by. Feedback text is `compactRichTextArea` HTML.
+- **Request forms (e.g. a promotion consideration form).** A Workday *Request*
+  questionnaire. The questionnaire object itself is security-gated
+  (`/inst/3$34469/<iid>` returns a `System_Error` without the coordinator
+  role), so its form is only reachable inside the **Create Request** flow:
+  1. `GET /{tenant}/task/2997$12683.htmld` — the delivered Create Request task;
+     returns the prompt page with `flowExecutionKey`, `promptUriTemplate`, a
+     `monikerListInput` "Request Type" (`id`, `contextId`), and `body.id`.
+  2. `POST /{tenant}/prompt/<contextId>/<id>.htmld` — form-urlencoded
+     `_flowExecutionKey`, `_eventId_prompt=<id>`, `q=<search>` → `{items:[{instanceId,text}]}`.
+  3. `POST /{tenant}/flowController.htmld` — `_eventId_add=<id>`, `<id>=<iid>`,
+     `<iid>_DID/_IID/_PV/_V` → a `changeSummary`.
+  4. `POST flowController` — `_eventId_submit=<body.id>`: the prompt's OK → the form.
+  5. `POST flowController` — `_eventId_cancel=Cancel` abandons the flow.
+
+  Every POST carries `sessionSecureToken` in the body AND a
+  `Session-Secure-Token` header, plus a `clientRequestID`. **`_eventId_submit`
+  is also how a loaded form is submitted**, so it may only ever be sent while
+  the current page is the prompt — a loaded form carries a `bpfToolbar` /
+  `bpfButtonBar` (Submit `934$20`, Save for Later `934$14`). Verified live: a
+  flow abandoned after step 4 leaves nothing under My Requests / Requests In
+  Progress.
+
+  The form: a `panel` per question holding a `richTextArea` whose id contains
+  `Question_Body` (bold title, help text, and a trailing " (Required)" — there
+  is no required flag), plus a text, date AND number answer input of which all
+  but the one in use carry `hideAdvice: "ALWAYS"`; choice questions add a
+  `radioButtonSelectList`. Instructions are the `richTextArea` whose id
+  contains `Questionnaire_Instructions`.
+
 ## Session-expiry detection
 
 An expired session bounces to the IdP. The client flags sign-out when the final
@@ -183,8 +239,8 @@ Verified against 26 captured envelopes, 24 of which carried a live
   GraphQL surface (`/wday/pex/graphql/graphql?operation=…`, POST). The
   `workday_graphql` tool can reach it, but Workday does not publish the
   operations, so the documents must be captured from the browser first.
-- **Direct reports** — needs the POST-only `navigable` expansion above, or a
-  report run with prompt values.
+- **Direct reports** — solved without the POST-only `navigable` expansion: see
+  "Review and promotion season" above (profile → Organizations → Members).
 - **Running prompted reports** — a POST of prompt values. Read-shaped, but a
   POST; needs capture plus a decision on whether it counts as a write.
 - **Writes** (planned) — multi-step business processes, not single POSTs; each
