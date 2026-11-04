@@ -177,6 +177,33 @@ describe('workday_get_inbox view "brief"', () => {
     expect(line).toMatch(/… — 2026-10-28 — to do$/);
   });
 
+  it('escapes a title that starts with "-- " or "\\" with one backslash, so it never reads as a note', async () => {
+    const { text } = await setup(() => ({
+      total: 3,
+      data: [
+        item('-- none', 'Approve', '2026-10-01'),
+        item('\\server\\share', 'Approve', '2026-10-02'),
+        item('--draft', 'Approve', '2026-10-03'),
+      ],
+    }));
+    expect(parse(await text('workday_get_inbox', { view: 'brief' })).data).toEqual([
+      '\\-- none — 2026-10-01 — to do',
+      '\\\\server\\share — 2026-10-02 — to do',
+      '--draft — 2026-10-03 — to do',
+    ]);
+  });
+
+  it('keeps an escaped long title within 120 characters as a whole', async () => {
+    const { text } = await setup(() => ({
+      total: 1,
+      data: [item(`-- ${'y'.repeat(300)}`, 'Do it', '2026-10-28T10:00:00.000Z')],
+    }));
+    const [line] = parse(await text('workday_get_inbox', { view: 'brief' })).data;
+    expect(line!.length).toBeLessThanOrEqual(120);
+    expect(line!.startsWith('\\-- y')).toBe(true);
+    expect(line).toMatch(/… — 2026-10-28 — to do$/);
+  });
+
   it('says "-- none" for an empty inbox', async () => {
     const { text } = await setup();
     expect(parse(await text('workday_get_inbox', { view: 'brief' })).data).toEqual(['-- none']);

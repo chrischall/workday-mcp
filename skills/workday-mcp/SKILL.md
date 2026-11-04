@@ -269,7 +269,8 @@ person says.
   inside the untrusted-data envelope as `data: string[]`, because the titles
   are written by other Workday users. A line starting `-- ` is a note, not a
   task: `-- none` for an empty inbox, `-- N of M shown` when only part of it
-  was read.
+  was read. A task whose own title starts with `-- ` or `\` is escaped with
+  one leading `\`, so it never reads as a note.
 - Nothing here answers "what's new" or "what's on" (no notification feed, no
   calendar), so no other tool is canonical.
 - **A compound ask** looks like "what's due at work, and anything due at
