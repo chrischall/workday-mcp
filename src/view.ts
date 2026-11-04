@@ -83,13 +83,17 @@ export const untrustedResponse = (data: unknown): ReturnType<typeof minifiedResu
 
 /**
  * A `view: "brief"` line (the context-groups contract): `title — <ISO date |
- * no date> — <status>`, at most 120 characters, the title shortened to fit.
+ * no date> — <status>`, at most 120 characters as a whole, the title
+ * shortened to fit. A title that starts with `-- ` or `\` is escaped with one
+ * leading `\`, so another user's task title can never read as a note — the
+ * gateway strips one backslash from every item line after its note check.
  */
 export function briefLine(title: string, date: string | undefined, status: string): string {
   const day = date && /^\d{4}-\d{2}-\d{2}/.test(date) ? date.slice(0, 10) : 'no date';
+  const escaped = title.startsWith('-- ') || title.startsWith('\\') ? `\\${title}` : title;
   const tail = ` — ${day} — ${status}`;
   const room = 120 - tail.length;
-  const shown = title.length > room ? `${title.slice(0, Math.max(room - 1, 0))}…` : title;
+  const shown = escaped.length > room ? `${escaped.slice(0, Math.max(room - 1, 0))}…` : escaped;
   return `${shown}${tail}`;
 }
 
