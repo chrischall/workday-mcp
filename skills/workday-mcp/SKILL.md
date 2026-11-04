@@ -190,6 +190,8 @@ Ten of this server's nineteen tools take `view: "compact" | "full"` —
 **`workday_get_my_requests`**, **`workday_get_team_snapshot`** and
 **`workday_get_request`** — and on all ten **`compact` is the DEFAULT**.
 The slim rung is what you get without asking for it.
+`workday_get_inbox` also takes `view: "brief"` — one line per task, for a host
+composing a context-group answer (see "In context groups" below).
 
 Those ten are the deep reads: the ones that follow a hub down to its child
 cards, open one named item on a profile, or read a whole review or form, and
@@ -248,6 +250,31 @@ Passing `view` to one of those is not an error and will not fail: the tool
 does not declare it, so zod drops the unknown key and the call runs exactly as
 it would have. Nothing warns you, so a successful call is not evidence the
 rung was honoured.
+
+## In context groups
+
+On a host that composes context groups (mcp-host's intent tools), every tool
+here is in the **`work`** group. Each carries a `_meta.mint` hint (inert to any
+other client): an intent (`lookup` for the reads, `change` for
+`workday_update_request`, `other` for the two escape hatches) and the words a
+person says.
+
+- **One canonical read: `workday_get_inbox`, for "what's due at work?"** It has
+  no subject (it is your own inbox, so there is nothing to list) and takes no
+  date range. Its `view: "brief"` answers one line per task —
+  `<title> — <ISO date created | no date> — <to do | to do, starred | done>` —
+  inside the untrusted-data envelope as `data: string[]`, because the titles
+  are written by other Workday users. A line starting `-- ` is a note, not a
+  task: `-- none` for an empty inbox, `-- N of M shown` when only part of it
+  was read.
+- Nothing here answers "what's new" or "what's on" (no notification feed, no
+  calendar), so no other tool is canonical.
+- **A compound ask** looks like "what's due at work, and anything due at
+  school?": the host asks the inbox's brief view beside the school group's
+  canonical read and answers both together.
+- **This is a browser-bridged MCP.** Every call rides your signed-in Workday
+  tab through ContextMint Bridge, so when no browser is connected the group
+  answers that Workday needs your browser open rather than an empty list.
 
 ## What the parser understands
 

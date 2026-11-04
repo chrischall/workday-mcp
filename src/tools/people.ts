@@ -8,6 +8,7 @@ import {
   viewArg,
   viewResponse,
 } from '../view.js';
+import { workMeta } from './hints.js';
 
 /**
  * The people surface — what a manager reaches for.
@@ -28,6 +29,7 @@ export function registerPeopleTools(
         'Read the reporting chain around you: each person with their business title, location, ' +
         'report count, and a `profileUri` you can pass straight to `workday_get_worker`. ' +
         'Resolves the Org Chart app from your own app menu. Read-only.',
+      _meta: workMeta('lookup', { aliases: ['org chart', 'who reports to', 'my manager'] }),
       annotations: {
         title: 'Read your org chart',
         readOnlyHint: true,
@@ -64,6 +66,7 @@ export function registerPeopleTools(
         'Then use `workday_get_worker_task` to open one by name. Shows only what your own ' +
         'Workday permissions already allow. Read-only.'
       ),
+      _meta: workMeta('lookup', { aliases: ['coworker', 'colleague', 'employee profile'] }),
       annotations: {
         title: 'Read a worker profile',
         readOnlyHint: true,
@@ -101,6 +104,7 @@ export function registerPeopleTools(
         "and so on. Matched case-insensitively against that worker's own task catalog; if it " +
         'does not match, the error lists exactly what is available. Read-only.'
       ),
+      _meta: workMeta('lookup'),
       annotations: {
         title: 'Open one task on a worker profile',
         readOnlyHint: true,
@@ -135,6 +139,7 @@ export function registerPeopleTools(
         'Read your own worker profile — the same catalog `workday_get_worker` returns, for ' +
         'yourself. Use it to find your pay, benefits, time off, goals, and feedback. Read-only.'
       ),
+      _meta: workMeta('lookup', { aliases: ['my profile', 'my job', 'my workday'] }),
       annotations: {
         title: 'Read your own Workday profile',
         readOnlyHint: true,
