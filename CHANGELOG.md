@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.0](https://github.com/chrischall/workday-mcp/compare/v1.2.0...v1.3.0) (2026-11-04)
+
+
+### Features
+
+* context-group hints ([#181](https://github.com/chrischall/workday-mcp/issues/181)) ([6e7ccb9](https://github.com/chrischall/workday-mcp/commit/6e7ccb9322cc55ba15716e1e02c87acc654ccd31))
+
+
+### Bug Fixes
+
+* **brief:** align the brief view with the fleet contract ([#185](https://github.com/chrischall/workday-mcp/issues/185)) ([08c3fab](https://github.com/chrischall/workday-mcp/commit/08c3fab8788f104d138b3c7c766b583526901f9d))
+
+
+### Documentation
+
+* document workday_get_inbox's additive brief view; tidy review.ts imports ([#184](https://github.com/chrischall/workday-mcp/issues/184)) ([3ce5690](https://github.com/chrischall/workday-mcp/commit/3ce5690911122ae48bc4f95276ca4bf0b8a1a073))
+
 ## [1.2.0](https://github.com/chrischall/workday-mcp/compare/v1.1.11...v1.2.0) (2026-10-30)
 
 
