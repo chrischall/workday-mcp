@@ -64,7 +64,7 @@ yourself, or check a release zip against the `.sha256` file published beside it
 | `workday_get_team` | The people on the teams you manage — each with worker id, position, location and profile link |
 | `workday_get_reviews` | A worker's performance reviews (period, rating), or one review in full: manager and employee ratings and comments, goals, development items |
 | `workday_get_feedback` | Feedback a worker received, gave, or requested — author, date, badge and full text |
-| `workday_get_inbox` | Your inbox ("My Tasks"): review comments to provide, feedback requests, questionnaires, approvals — each with a `uri` to open read-only. `category: "archive"` for completed items |
+| `workday_get_inbox` | Your inbox ("My Tasks"): review comments to provide, feedback requests, questionnaires, approvals — each with a `uri` to open read-only. `category: "archive"` for completed items. Also takes `view: "brief"` (additive to `compact`/`full`): one line per task, `<title> — <ISO date | no date> — <status>`, in the untrusted-data envelope, with `-- ` note lines (`-- none`, `-- N of M shown`) |
 | `workday_get_my_requests` | The requests you created (e.g. promotion consideration forms) with their status |
 | `workday_get_team_snapshot` | One table of everyone in your organization — grade, job profile, last promotion, rating, pay — from the My Team hub's associates report |
 | `workday_get_request` | Your open requests (e.g. promotion forms you started), or one request's questions with its saved answers |

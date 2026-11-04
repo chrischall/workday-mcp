@@ -106,7 +106,10 @@ reuses that live session — there is no separate login.
 - **`workday_get_inbox`** — your inbox ("My Tasks"): review comments to
   provide, feedback requests, questionnaires, approvals, each with its
   business-process type, dates and a `uri` to open read-only with
-  `workday_get_task`. `category: "archive"` lists completed items.
+  `workday_get_task`. `category: "archive"` lists completed items. Besides
+  `compact`/`full` it takes `view: "brief"` — an additive value (a contract
+  extension; the other rungs are unchanged): one line per task, inside the
+  untrusted-data envelope, with `-- ` note lines (see "In context groups").
 - **`workday_get_my_requests`** — the requests you created (promotion
   consideration forms and the like) with status and dates.
 - **`workday_get_team_snapshot`** — one table of everyone in your

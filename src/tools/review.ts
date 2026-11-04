@@ -3,10 +3,10 @@ import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
 import { minifiedResult } from '../mcp.js';
 import { WD_VIEWS, briefLine, untrustedBriefResponse, untrustedDescription, viewArg, viewResponse } from '../view.js';
+import { workMeta } from './hints.js';
 
 /** The inbox's rungs: the server's two, plus the context-groups one-line view. */
 const INBOX_VIEWS = [...WD_VIEWS, 'brief'] as const;
-import { workMeta } from './hints.js';
 
 /**
  * The review-season surface: your team, their reviews and feedback, and the
