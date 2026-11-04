@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
 import { minifiedResult } from '../mcp.js';
 import { untrustedDescription, viewArg, viewResponse } from '../view.js';
+import { workMeta } from './hints.js';
 
 /**
  * List the user's Workday apps (Personal Information, Benefits and Pay,
@@ -23,6 +24,7 @@ export function registerAppsTools(
         "Use this to discover what you can read, then pass an app's `taskId` to `workday_get_task` " +
         'to open it. Some apps share a generic launcher id; if one returns a near-empty page, open ' +
         'the app in your browser and pass that URL to `workday_get_task` instead. Read-only.',
+      _meta: workMeta('lookup', { aliases: ['workday apps', 'workday menu'] }),
       annotations: {
         title: 'List your Workday apps',
         readOnlyHint: true,
@@ -49,6 +51,7 @@ export function registerAppsTools(
         'Matched case-insensitively against your own app menu, so it works without knowing any ' +
         'task ids. Read-only.'
       ),
+      _meta: workMeta('lookup', { aliases: ['benefits', 'pay', 'time off', 'payslip'] }),
       annotations: {
         title: 'Open a Workday app by name',
         readOnlyHint: true,

@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
 import { untrustedDescription, viewArg, viewResponse } from '../view.js';
+import { workMeta } from './hints.js';
 
 /**
  * The read workhorse: fetch any Workday `*.htmld` data endpoint through the
@@ -33,6 +34,7 @@ export function registerTaskTools(
         'are normalized automatically). Every request rides your signed-in Workday tab. Read-only; ' +
         'no data is mutated.'
       ),
+      _meta: workMeta('lookup'),
       annotations: {
         title: 'Read a Workday task / data card',
         readOnlyHint: true,

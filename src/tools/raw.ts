@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { WorkdayClient } from '../client.js';
 import { capPayload } from '../redact.js';
 import { untrustedDescription, untrustedResponse } from '../view.js';
+import { workMeta } from './hints.js';
 
 /** Default cap on a raw payload. Workday envelopes routinely exceed 100 KB. */
 const DEFAULT_MAX_BYTES = 60_000;
@@ -31,6 +32,7 @@ export function registerRawTools(
         'fields the parser drops. Bare uris get `.htmld` appended and `/d/` SPA paths are ' +
         'normalized. Read-only (GET only).'
       ),
+      _meta: workMeta('other'),
       annotations: {
         title: 'Fetch a raw Workday endpoint',
         readOnlyHint: true,
@@ -74,6 +76,7 @@ export function registerRawTools(
         '`mutation` and `subscription` documents are REFUSED — this server is read-only — as are type-system (SDL) documents, whose definition boundaries cannot be tracked reliably. ' +
         'Secret and government/financial PII fields (SSN, national ID, bank account, driving licence, visa and other identity documents, …) come back redacted by field name, so aliasing one of them to another name is refused.'
       ),
+      _meta: workMeta('other'),
       annotations: {
         title: 'Run a Workday GraphQL query',
         readOnlyHint: true,

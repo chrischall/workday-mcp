@@ -8,6 +8,7 @@ import {
 } from '@chrischall/mcp-utils';
 import type { WorkdayClient } from '../client.js';
 import { untrustedDescription, untrustedResponse, viewArg, viewResponse } from '../view.js';
+import { workMeta } from './hints.js';
 
 /**
  * Your open Workday requests (promotion consideration forms and the like):
@@ -31,6 +32,7 @@ export function registerRequestTools(server: McpServer, client: WorkdayClient): 
           'each with its `request` id; or pass `request` to read one — every question with its help, ' +
           'whether it is required, its answer type/options, and the saved `answer`. Read-only.'
       ),
+      _meta: workMeta('lookup', { aliases: ['open requests', 'promotion form'] }),
       annotations: {
         title: 'Read your open requests',
         readOnlyHint: true,
@@ -61,6 +63,7 @@ export function registerRequestTools(server: McpServer, client: WorkdayClient): 
         'Unchanged answers are skipped; a submit needs every required question answered. After the write, ' +
         'the request is re-read to verify it. ' +
         `${CONFIRM_FLOW_SENTENCE} ${CONFIRM_INJECTION_RULE}`,
+      _meta: workMeta('change', { aliases: ['submit request', 'save request', 'promotion form'] }),
       annotations: {
         title: 'Change and save or submit a request',
         readOnlyHint: false,

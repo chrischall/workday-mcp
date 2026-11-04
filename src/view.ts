@@ -80,3 +80,27 @@ export const untrustedDescription = (description: string): string =>
 /** A fenced, minified result for a read tool that takes no `view`. */
 export const untrustedResponse = (data: unknown): ReturnType<typeof minifiedResult> =>
   untrustedResult(data, { note: WD_UNTRUSTED_NOTE });
+
+/**
+ * A `view: "brief"` line (the context-groups contract): `title — <ISO date |
+ * no date> — <status>`, at most 120 characters, the title shortened to fit.
+ */
+export function briefLine(title: string, date: string | undefined, status: string): string {
+  const day = date && /^\d{4}-\d{2}-\d{2}/.test(date) ? date.slice(0, 10) : 'no date';
+  const tail = ` — ${day} — ${status}`;
+  const room = 120 - tail.length;
+  const shown = title.length > room ? `${title.slice(0, Math.max(room - 1, 0))}…` : title;
+  return `${shown}${tail}`;
+}
+
+/**
+ * Answer a `view: "brief"` read. The lines carry text other Workday users
+ * wrote (task titles name people and processes), so they ride in the fleet's
+ * untrusted-data envelope as `data: string[]`, as every other rung of the tool
+ * is fenced. A line starting `-- ` is a note, not an item: `-- none` for an
+ * empty result, `-- N of M shown` for a partial page.
+ */
+export function untrustedBriefResponse(lines: string[], shown: number, total: number): ReturnType<typeof minifiedResult> {
+  const notes = [...(shown === 0 && total === 0 ? ['-- none'] : []), ...(shown < total ? [`-- ${shown} of ${total} shown`] : [])];
+  return minifiedResult(untrustedEnvelope([...lines, ...notes], { note: WD_UNTRUSTED_NOTE }));
+}
