@@ -245,7 +245,6 @@ const CREATE_REQUEST_TASK = '2997$12683';
  *  requests you created, with status. Delivered, like Create Request. */
 const MY_REQUESTS_TASK = '3005$4617';
 
-/** One item waiting in your Workday inbox ("My Tasks"). */
 export type BenefitsView = 'elections' | 'dependents' | 'beneficiaries' | 'history';
 
 export interface WorkdayBenefits {
@@ -354,6 +353,7 @@ export interface BenefitUpdateResult {
   verification: string;
 }
 
+/** One item waiting in your Workday inbox ("My Tasks"). */
 export interface WorkdayInboxItem {
   title: string;
   /** The business process it belongs to ("Performance Review", …). */
