@@ -70,6 +70,9 @@ yourself, or check a release zip against the `.sha256` file published beside it
 | `workday_get_request` | Your open requests (e.g. promotion forms you started), or one request's questions with its saved answers |
 | `workday_update_request` | **Write.** Change answers on an open request and Save for Later or Submit it — confirmation-token gated, verified by re-read |
 | `workday_get_request_form` | A request type's form (e.g. a promotion consideration form): instructions plus every question, required flag, answer type and options. Opens a new request to read it and cancels it before returning, so nothing is created |
+| `workday_get_benefits` | Your current benefit elections — plan, coverage, dependents, beneficiaries, what you and the company pay per period — or your dependents, beneficiaries, election history |
+| `workday_get_benefit_enrollment` | An open enrollment event, read without changing it: the deadline, what's elected if you do nothing, cost changes vs today, and every plan on offer with prices (`rates: true` adds the price at each coverage level) |
+| `workday_update_benefit_enrollment` | **Write.** Choose or waive plans and set HSA/FSA amounts in an open enrollment, then Save for Later or sign and Submit — confirmation-token gated, verified by re-read |
 | `workday_fetch` | Raw `.htmld` read with secrets redacted — the escape hatch for pages the parser doesn't model yet |
 | `workday_graphql` | Read-only GraphQL against Workday's PEX surface (mutations refused). The only route to Inbox / search |
 | `workday_healthcheck` | Verify the bridge + session end-to-end with an actionable hint |
@@ -104,15 +107,37 @@ workday_update_request     { request, answers: { "8": "…" }, action: "save" } 
 workday_update_request     { …same…, confirmToken }     → writes, then re-reads to verify
 ```
 
+### Benefits enrollment season
+
+```
+workday_get_benefits                                    → what you have now, and what it costs
+workday_get_benefit_enrollment                          → deadline, next year's cost changes, every plan on offer
+workday_get_benefit_enrollment { planType: "medical", rates: true }  → each plan's price at every coverage level
+workday_get_benefits       { show: "dependents" }       → who you can cover
+```
+
+Making elections — confirmation-gated, like the request write:
+
+```
+workday_update_benefit_enrollment { changes: [{ planType: "dependent care", waive: true },
+                                              { planType: "health savings", annualContribution: 7800 }],
+                                    action: "save" }      → preview + confirmToken
+workday_update_benefit_enrollment { …same…, confirmToken } → writes, then re-reads to verify
+workday_update_benefit_enrollment { changes: [], action: "submit" }   → Review and Sign, I Accept, Submit
+```
+
 ### Writes
 
-`workday_update_request` is the only tool that changes anything. It is gated
+Two tools change anything: `workday_update_request` and
+`workday_update_benefit_enrollment` (choose or waive plans, set an HSA/FSA
+amount, then Save for Later or sign and Submit). Both are gated
 by the fleet confirm flow (`@chrischall/mcp-utils` `confirmWrite`): the first
 call returns a preview of every changed answer and a single-use `confirmToken`
 and sends nothing; only a repeat call with that token writes. The token is
-bound to the request, the action, the answers, the preview and a hash of the
-request's saved answers from a fresh read, so it is refused if any of them
-changes. Configure with `MCP_CONFIRM_MODE` / `MCP_CONFIRM_TTL_SECONDS` /
+bound to the request (or enrollment event), the action, the answers (or
+changes), the preview and a hash of what is saved from a fresh read, so it is
+refused if any of them changes. A benefits `submit` signs Workday's electronic
+signature on your behalf — the preview says so. Configure with `MCP_CONFIRM_MODE` / `MCP_CONFIRM_TTL_SECONDS` /
 `MCP_CONFIRM_SECRET`.
 
 All ids are discovered at runtime from your own app menu and org chart — nothing

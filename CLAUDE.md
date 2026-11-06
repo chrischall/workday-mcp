@@ -46,6 +46,14 @@ every request rides the user's signed-in `*.myworkday.com` tab.
   form submits it, so it is refused once a page carries the `bpfButtonBar`.
   Never add a step that names a `bpfButton`. **Tenant-specific ids are learned at runtime** — the
   worker-profile uri prefix comes from a live org-chart node, never a constant.
+- `src/parse-benefits.ts` — the benefits pages (`parse.ts`' allowlist rule
+  applies): your related-task catalog, an enrollment event's window, the
+  elections landing page, a plan type's `chunkedEditGrid` of plans on offer,
+  a plan's rate table, and elections grids → typed elections. Reads command
+  buttons only when they are GETs — the enrollment pages carry POST buttons
+  (Save for Later, Review and Sign, Confirm and Continue) that change
+  elections. `getBenefits` / `getBenefitEnrollment` in `client.ts` are
+  GET-only; `tools/benefits.ts` registers them.
 - `src/transport-fetchproxy.ts` — wraps `@chrischall/mcp-utils/fetchproxy`;
   `splitHost` maps `wd5.myworkday.com` → domain `myworkday.com` + subdomain `wd5`.
 - `src/tools/*.ts` — `registerXxxTools(server, client)` → `server.registerTool`.
@@ -60,12 +68,18 @@ See `docs/WORKDAY-API.md` for the captured endpoint shapes and the widget schema
 - **TDD.** Failing test → minimal code → green. The parser especially.
 - **Verify the parser against real bytes**, not just synthetic fixtures — the
   `propertyName`-vs-object-key bug only showed up against live data.
-- Reads only the user's own data. **The one write is `workday_update_request`**
-  (src/tools/requests.ts): `planRequestUpdate` (fresh read → diff → steps,
+- Reads only the user's own data. **There are two writes,
+  `workday_update_request` and `workday_update_benefit_enrollment`.** The
+  first (src/tools/requests.ts): `planRequestUpdate` (fresh read → diff → steps,
   sends nothing) → `confirmWrite` (token bound to request, action, answers,
   preview and a revision hash of the saved answers) → `applyRequestUpdate`
   (posts, stops before the commit on any non-changeSummary, then re-reads to
-  verify). Any new write must follow that shape and be added to the explicit
+  verify). The benefits write (src/tools/benefits.ts) has the same shape:
+  `planBenefitUpdate` → `confirmWrite` (token also bound to a hash of the
+  event's current elections) → `applyBenefitUpdate`, which walks each plan
+  type's sub-flow, then Save for Later or Review and Sign → I Accept →
+  Submit, stopping at the first step Workday does not acknowledge and naming
+  the plan types already changed. Any new write must follow that shape and be added to the explicit
   write allowlist in tests/tool-annotations.test.ts.
 - Version lives once in `src/version.ts` (`x-release-please-version`); don't
   hand-bump — release-please owns it. `extra-files` in `release-please-config.json`
