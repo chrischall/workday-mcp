@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/chrischall/workday-mcp/compare/v1.3.0...v1.4.0) (2026-11-06)
+
+
+### Features
+
+* **benefits:** read and make benefit elections ([4f229e4](https://github.com/chrischall/workday-mcp/commit/4f229e4371580a94f4a336096834f760c9bdca02))
+
 ## [1.3.0](https://github.com/chrischall/workday-mcp/compare/v1.2.0...v1.3.0) (2026-11-04)
 
 
