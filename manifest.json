@@ -142,6 +142,18 @@
     {
       "name": "workday_update_request",
       "description": "Change answers on an open request and Save for Later or Submit it — confirmation-token gated, verified by re-read"
+    },
+    {
+      "name": "workday_get_benefits",
+      "description": "Your current benefit elections with coverage, dependents, beneficiaries and per-pay-period cost; or your dependents, beneficiaries, election history"
+    },
+    {
+      "name": "workday_get_benefit_enrollment",
+      "description": "Read an open enrollment event without changing it: deadline, next year's cost changes, every plan on offer with prices"
+    },
+    {
+      "name": "workday_update_benefit_enrollment",
+      "description": "Write. Choose or waive plans and set HSA/FSA amounts in an open enrollment, then Save for Later or sign and Submit — confirmation-gated, verified by re-read"
     }
   ]
 }

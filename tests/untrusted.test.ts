@@ -8,6 +8,7 @@ import { registerRawTools } from '../src/tools/raw.js';
 import { registerTaskTools } from '../src/tools/task.js';
 import { registerReviewTools } from '../src/tools/review.js';
 import { registerRequestTools } from '../src/tools/requests.js';
+import { registerBenefitTools } from '../src/tools/benefits.js';
 import { WD_UNTRUSTED_NOTE } from '../src/view.js';
 import type {
   BridgeProbeResult,
@@ -62,6 +63,8 @@ const UNTRUSTED_TOOLS = [
   'workday_get_inbox',
   'workday_get_my_requests',
   'workday_get_request',
+  'workday_get_benefits',
+  'workday_get_benefit_enrollment',
 ] as const;
 
 const TRUSTED_TOOLS = ['workday_get_apps', 'workday_get_org_chart', 'workday_get_team'] as const;
@@ -88,6 +91,8 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
     vi.spyOn(client, 'getTeamSnapshot').mockResolvedValue({ report: 'All', people: [{ Name: INJECTION }] });
     vi.spyOn(client, 'getRequest').mockResolvedValue({ request: '1$1', questions: [{ number: 1, question: INJECTION, required: true, answerType: 'text' }] });
     vi.spyOn(client, 'getInbox').mockResolvedValue({ total: 1, items: [{ title: INJECTION }] });
+    vi.spyOn(client, 'getBenefits').mockResolvedValue({ matched: 'View Dependents', rows: [{ Dependent: INJECTION }] });
+    vi.spyOn(client, 'getBenefitEnrollment').mockResolvedValue({ event: { title: INJECTION }, elected: [] });
     vi.spyOn(client, 'getMyRequests').mockResolvedValue({ requests: [{ Request: INJECTION }] });
     vi.spyOn(client, 'getRequestForm').mockResolvedValue({
       requestType: 'Promotion',
@@ -100,6 +105,7 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
       registerRawTools(server, client);
       registerReviewTools(server, client);
       registerRequestTools(server, client);
+      registerBenefitTools(server, client);
     });
   });
 
@@ -139,6 +145,8 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
     ['workday_get_inbox', { category: 'archive' }],
     ['workday_get_my_requests', {}],
     ['workday_get_request', { request: '1$1' }],
+    ['workday_get_benefits', {}],
+    ['workday_get_benefit_enrollment', {}],
   ];
 
   it.each(calls)('%s fences its result, markers before the content', async (name, args) => {

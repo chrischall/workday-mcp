@@ -52,6 +52,30 @@ import {
   type WorkdayProfileSection,
 } from './parse.js';
 import { isSecretKey, redactTree } from './redact.js';
+import {
+  changeSummaryXml,
+  electionsFromGrid,
+  hasWidget,
+  isSavedPage,
+  isSubmittedPage,
+  formatMoney,
+  money,
+  pageErrors,
+  parseContributionForm,
+  parseLandingActions,
+  parsePlanTypeForm,
+  parseSaveModal,
+  parseSignForm,
+  moneyChange,
+  parseEnrollmentEvent,
+  parseEnrollmentLanding,
+  parsePlanOptions,
+  parsePlanRates,
+  parseRelatedTaskCatalog,
+  type WorkdayBenefitElection,
+  type WorkdayCatalogTask,
+  type WorkdayPlanOption,
+} from './parse-benefits.js';
 
 /** Redaction depth cap for the typed path — generous so it never cuts off a
  *  subtree that `parseTask`'s own depth-40 walks (from nested sub-roots) reach. */
@@ -222,6 +246,114 @@ const CREATE_REQUEST_TASK = '2997$12683';
 const MY_REQUESTS_TASK = '3005$4617';
 
 /** One item waiting in your Workday inbox ("My Tasks"). */
+export type BenefitsView = 'elections' | 'dependents' | 'beneficiaries' | 'history';
+
+export interface WorkdayBenefits {
+  /** The Benefits task that was read ("View My Current Benefit Elections"). */
+  matched: string;
+  costPeriod?: string;
+  elections?: WorkdayBenefitElection[];
+  totals?: { youPay?: string; companyPays?: string };
+  /** The other views' rows, keyed by column. */
+  rows?: Array<Record<string, string>>;
+  incomplete?: { shown: number; total: number };
+}
+
+export interface BenefitEnrollmentOptions {
+  /** Part of the event's inbox title, when several are open. */
+  event?: string;
+  /** Only this plan type ("medical"), matched case-insensitively. */
+  planType?: string;
+  /** Add each plan's rate table by coverage level (needs `planType`). */
+  rates?: boolean;
+}
+
+export type WorkdayEnrollmentPlan = Omit<WorkdayPlanOption, 'detailsUri'> & {
+  provider?: string;
+  providerUrl?: string;
+  rates?: Array<{ coverage: string; youPay: string }>;
+};
+
+export interface WorkdayEnrollmentPlanType {
+  group?: string;
+  planType: string;
+  current?: string;
+  waived?: true;
+  costPeriod?: string;
+  plans?: WorkdayEnrollmentPlan[];
+  notes?: string[];
+  instructions?: string;
+}
+
+type MoneyPair = { now?: string; next?: string; change?: string };
+
+export interface WorkdayBenefitEnrollment {
+  event?: {
+    title: string;
+    name?: string;
+    opens?: string;
+    closes?: string;
+    effective?: string;
+    instructions?: string;
+    status?: string;
+  };
+  /** What is elected in this event right now — the outcome if you change nothing. */
+  elected?: WorkdayBenefitElection[];
+  costChanges?: Array<{ plan: string } & MoneyPair>;
+  totals?: { period?: string; youPay?: MoneyPair; companyPays?: MoneyPair };
+  projectedCost?: string;
+  waived?: string[];
+  beneficiaries?: Array<Record<string, string>>;
+  planTypes?: WorkdayEnrollmentPlanType[];
+  toDos?: Array<{ title: string; created?: string }>;
+  otherEvents?: string[];
+  note?: string;
+  errors?: string[];
+}
+
+export type BenefitAction = 'save' | 'submit';
+
+/** One requested change to an enrollment: pick `plan`, `waive` the type, or
+ *  set an `annualContribution` (HSA/FSA) — alone or with `plan`. */
+export interface BenefitChangeInput {
+  planType: string;
+  plan?: string;
+  waive?: boolean;
+  annualContribution?: number;
+}
+
+export interface BenefitChangePreview {
+  planType: string;
+  from: string;
+  to: string;
+}
+
+export interface BenefitUpdatePlan {
+  event: string;
+  inboxUri: string;
+  detailsUri?: string;
+  startUri: string;
+  action: BenefitAction;
+  steps: Array<{ planType: string; uri: string; plan?: string; waive?: boolean; annualContribution?: number }>;
+  preview: {
+    event: string;
+    deadline?: string;
+    action: BenefitAction;
+    projectedCostNow?: string;
+    changes: BenefitChangePreview[];
+    unchanged?: string[];
+  };
+  revision: string;
+}
+
+export interface BenefitUpdateResult {
+  event: string;
+  action: BenefitAction;
+  changes: BenefitChangePreview[];
+  verified: boolean;
+  verification: string;
+}
+
 export interface WorkdayInboxItem {
   title: string;
   /** The business process it belongs to ("Performance Review", …). */
@@ -469,6 +601,16 @@ function matchApp(apps: WorkdayApp[], match: string | RegExp): WorkdayApp | null
       : (label: string) => match.test(label);
   return apps.find((a) => test(a.label)) ?? null;
 }
+
+/** The open benefit event to act on: by part of its title, else the newest. */
+function pickBenefitEvent(open: WorkdayInboxItem[], event?: string): WorkdayInboxItem {
+  return event
+    ? pickByLabel(open, (i) => i.title, event, 'open benefit event')
+    : open.reduce((best, i) => ((i.created ?? '') > (best.created ?? '') ? i : best));
+}
+
+/** Collapse Workday's doubled spaces ("VSP  Signature") for comparisons. */
+const squash = (s: string): string => s.replace(/\s+/g, ' ').trim();
 
 export class WorkdayClient {
   private readonly transport: WorkdayTransport;
@@ -1201,6 +1343,553 @@ export class WorkdayClient {
       report: hit.label,
       people,
       ...(total > people.length ? { incomplete: { shown: people.length, total } } : {}),
+    };
+  }
+
+  /**
+   * Your own Benefits tasks — the "Benefits" folder of your related-task
+   * catalog (`/inst/<you>/rel-tasks`), VIEW tasks only. The catalog's
+   * non-view tasks ("Change Benefits") start a business process and are never
+   * returned. The catalog uri comes from the envelope's `currentUser` (the
+   * signed-in user), read off the org chart page; nothing is hardcoded.
+   */
+  private async myBenefitTasks(): Promise<WorkdayCatalogTask[]> {
+    const page = await this.openApp(/org chart|organization chart/i, { depth: 0 });
+    const uri =
+      page.user?.relatedTasksUri ??
+      (page.org?.workerId ? `/${this.tenant}/inst/${page.org.workerId}/rel-tasks` : undefined);
+    if (!uri) {
+      throw new Error('Could not find your own task catalog to locate your Benefits tasks.');
+    }
+    const catalog = parseRelatedTaskCatalog(await this.getRedacted(uri));
+    return catalog.filter((t) => t.view && /benefit/i.test(t.folder ?? ''));
+  }
+
+  /**
+   * Your benefits, read from your own Benefits catalog by label:
+   * `elections` (default) — every current election with coverage, covered
+   * dependents, beneficiaries and per-pay-period cost to you and the company;
+   * `dependents`, `beneficiaries`, `history` — those views' rows. All GETs.
+   */
+  async getBenefits(show: BenefitsView = 'elections'): Promise<WorkdayBenefits> {
+    const tasks = await this.myBenefitTasks();
+    const patterns: Record<BenefitsView, RegExp[]> = {
+      elections: [/current benefit elections/i, /benefit elections$/i],
+      dependents: [/dependents/i],
+      beneficiaries: [/beneficiar/i],
+      history: [/election history|benefit.*history/i],
+    };
+    let task: WorkdayCatalogTask | undefined;
+    for (const re of patterns[show]) {
+      task = tasks.find((t) => re.test(t.label));
+      if (task) break;
+    }
+    if (!task) {
+      throw new Error(
+        `No Benefits task for ${show} in your Workday task catalog. Benefits tasks you have: ` +
+          `${tasks.map((t) => t.label).join(' | ') || '(none)'}.`
+      );
+    }
+    let page = await this.getTask(task.uri);
+    if (show !== 'elections') {
+      const rows = page.grids.flatMap((g) => g.rows.map((r) => r.cells));
+      const total = page.grids.reduce((n, g) => n + (g.totalRowCount ?? g.rows.length), 0);
+      return { matched: task.label, rows, ...(total > rows.length ? { incomplete: { shown: rows.length, total } } : {}) };
+    }
+    // The elections page is a deck of cards; its "View as Grid" (a GET view)
+    // is the same data as one table with dates, dependents and both costs.
+    if (!page.grids.some((g) => g.rows.length)) {
+      const links = [...page.childCards, ...page.navigation, ...page.relatedTasks];
+      const asGrid = links.find((l) => /grid/i.test(l.label) && l.uri);
+      if (asGrid?.uri) page = await this.getTask(asGrid.uri);
+    }
+    const grid = page.grids.find((g) => g.rows.length);
+    if (!grid) {
+      throw new Error(
+        `"${task.label}" did not return an elections table. Open it in your browser and pass its ` +
+          'URL to `workday_get_task` to see what it returns.'
+      );
+    }
+    return { matched: task.label, ...electionsFromGrid(grid) };
+  }
+
+  /**
+   * An open benefit event (annual enrollment, a life event) in full, read
+   * without changing it:
+   *
+   * 1. Your inbox's benefit items — the event to open, and any "To Do" steps.
+   * 2. The event's inbox page → its enrollment window and the read-only
+   *    "Let's Get Started" GET into the elections.
+   * 3. The event's "View Details" → what is elected in it right now (a
+   *    rollover of last year until you change it), waived types,
+   *    beneficiaries, process status — compared against your current
+   *    elections, so cost changes are explicit.
+   * 4. The elections landing page → one card per plan type → each plan type's
+   *    page: every plan on offer with what you and the company would pay.
+   *
+   * Every step is a GET. The plan-type pages are the ones Workday shows in
+   * the enrollment flow; opening one changes no election — only their
+   * "Confirm and Continue" and the landing page's "Save for Later" / "Review
+   * and Sign" (POSTs) would, and none is ever sent. Verified live: the event
+   * stayed "Not Started". It is not invisible, though: Workday badges each
+   * opened plan type "Reviewed" in the enrollment page.
+   */
+  async getBenefitEnrollment(opts: BenefitEnrollmentOptions = {}): Promise<WorkdayBenefitEnrollment> {
+    if (opts.rates && !opts.planType) {
+      throw new Error(
+        'Pass `planType` with `rates` (e.g. "medical"): rates are one extra page per plan, so they ' +
+          'are read for one plan type at a time.'
+      );
+    }
+    const { open, toDos } = await this.benefitInbox();
+    if (!open.length) {
+      return {
+        note: 'No open benefit event in your Workday inbox — nothing to enroll in right now.',
+        ...(toDos.length ? { toDos } : {}),
+      };
+    }
+    const chosen = pickBenefitEvent(open, opts.event);
+    const otherEvents = open.filter((i) => i !== chosen).map((i) => i.title);
+    const errors: string[] = [];
+
+    const inboxPage = parseEnrollmentEvent(await this.getRedacted(chosen.uri as string));
+    const event: WorkdayBenefitEnrollment['event'] = {
+      title: chosen.title,
+      ...(inboxPage.event ? { name: inboxPage.event } : {}),
+      ...(inboxPage.opens ? { opens: inboxPage.opens } : {}),
+      ...(inboxPage.closes ? { closes: inboxPage.closes } : {}),
+      ...(chosen.effective ? { effective: chosen.effective } : {}),
+      ...(inboxPage.instructions ? { instructions: inboxPage.instructions } : {}),
+    };
+
+    const out: WorkdayBenefitEnrollment = { event, elected: [] };
+    if (chosen.detailsUri) {
+      const details = await this.getTask(chosen.detailsUri);
+      const gridNamed = (re: RegExp) => details.grids.find((g) => re.test(g.label));
+      const elected = gridNamed(/elected/i);
+      const table = elected ? electionsFromGrid(elected) : undefined;
+      out.elected = table?.elections ?? [];
+      const waived = gridNamed(/waived/i);
+      if (waived) out.waived = waived.rows.map((r) => Object.values(r.cells)[0]).filter((v): v is string => !!v);
+      const bens = gridNamed(/beneficiar/i);
+      if (bens?.rows.length) out.beneficiaries = bens.rows.map((r) => r.cells);
+      const history = gridNamed(/process history/i);
+      const last = history?.rows[history.rows.length - 1];
+      const status = last ? cellMatching(last.cells, /^status$/i) : undefined;
+      if (status) event.status = status;
+
+      if (table) {
+        try {
+          const current = await this.getBenefits('elections');
+          const nowBy = new Map(current.elections?.map((e) => [e.plan, e]) ?? []);
+          const nextBy = new Map(table.elections.map((e) => [e.plan, e]));
+          const plans = [...new Set([...nowBy.keys(), ...nextBy.keys()])];
+          const changes = plans.flatMap((plan) => {
+            const now = nowBy.get(plan)?.youPay;
+            const next = nextBy.get(plan)?.youPay;
+            if ((money(now) ?? 0) === (money(next) ?? 0)) return [];
+            const change = moneyChange(now, next);
+            return [{ plan, ...(now ? { now } : {}), ...(next ? { next } : {}), ...(change ? { change } : {}) }];
+          });
+          if (changes.length) out.costChanges = changes;
+          const pair = (now?: string, next?: string) =>
+            now || next
+              ? { ...(now ? { now } : {}), ...(next ? { next } : {}), ...(moneyChange(now, next) ? { change: moneyChange(now, next) } : {}) }
+              : undefined;
+          const youPay = pair(current.totals?.youPay, table.totals?.youPay);
+          const companyPays = pair(current.totals?.companyPays, table.totals?.companyPays);
+          const period = table.costPeriod ?? current.costPeriod;
+          if (youPay || companyPays) {
+            out.totals = { ...(period ? { period } : {}), ...(youPay ? { youPay } : {}), ...(companyPays ? { companyPays } : {}) };
+          }
+        } catch (e) {
+          errors.push(`current elections (for the cost comparison): ${messageOf(e)}`);
+        }
+      }
+    }
+
+    if (inboxPage.startUri) {
+      const landingPage = parseEnrollmentLanding(await this.getRedacted(inboxPage.startUri));
+      let cards = landingPage.planTypes;
+      if (opts.planType) {
+        const wanted = opts.planType.trim().toLowerCase();
+        cards = cards.filter((c) => c.planType.toLowerCase().includes(wanted));
+        if (!cards.length) {
+          throw new Error(
+            `No plan type matching "${opts.planType}" in this event. Plan types: ` +
+              `${landingPage.planTypes.map((c) => c.planType).join(' | ') || '(none)'}.`
+          );
+        }
+      }
+      if (landingPage.projectedCost) {
+        out.projectedCost = landingPage.projectedCost;
+      }
+      out.planTypes = await mapWithConcurrency(cards, 3, async (card) => {
+        const base: WorkdayEnrollmentPlanType = {
+          ...(card.group ? { group: card.group } : {}),
+          planType: card.planType,
+          ...(card.current ? { current: card.current } : {}),
+          ...(card.waived ? { waived: true } : {}),
+        };
+        if (!card.uri) return base;
+        try {
+          const options = parsePlanOptions(await this.getRedacted(card.uri));
+          if (!options) return base;
+          const plans: WorkdayEnrollmentPlan[] = await mapWithConcurrency(options.plans, 3, async (p) => {
+            const { detailsUri, ...plan } = p;
+            if (!opts.rates || !detailsUri) return plan;
+            try {
+              const r = parsePlanRates(await this.getRedacted(detailsUri));
+              return {
+                ...plan,
+                ...(r.provider ? { provider: r.provider } : {}),
+                ...(r.providerUrl ? { providerUrl: r.providerUrl } : {}),
+                ...(r.rates.length ? { rates: r.rates } : {}),
+              };
+            } catch (e) {
+              errors.push(`${card.planType} / ${p.plan} rates: ${messageOf(e)}`);
+              return plan;
+            }
+          });
+          return {
+            ...base,
+            ...(options.costPeriod ? { costPeriod: options.costPeriod } : {}),
+            plans,
+            ...(options.notes ? { notes: options.notes } : {}),
+            ...(options.instructions ? { instructions: options.instructions } : {}),
+          };
+        } catch (e) {
+          errors.push(`${card.planType}: ${messageOf(e)}`);
+          return base;
+        }
+      });
+    }
+
+    if (toDos.length) out.toDos = toDos;
+    if (otherEvents.length) out.otherEvents = otherEvents;
+    if (errors.length) out.errors = errors;
+    return out;
+  }
+
+  /** Your inbox's benefit items: open events, and leftover "To Do" steps. */
+  private async benefitInbox(): Promise<{ open: WorkdayInboxItem[]; toDos: Array<{ title: string; created?: string }> }> {
+    const { items } = await this.getInbox('actions');
+    const benefit = items.filter((i) => /benefit/i.test(i.type ?? '') && i.uri);
+    const toDos = benefit
+      .filter((i) => /^to ?do$/i.test(i.task ?? ''))
+      .map((i) => ({ title: i.title, ...(i.created ? { created: i.created } : {}) }));
+    return { open: benefit.filter((i) => !/^to ?do$/i.test(i.task ?? '')), toDos };
+  }
+
+  /**
+   * Plan changes to an open benefit event from a FRESH read, sending nothing:
+   * resolve each plan type and plan by label, validate it, drop changes that
+   * are already in place, and preview from → to. `revision` hashes the
+   * event's current elections, so a confirmation minted for one state of the
+   * enrollment is refused if it changes before the write.
+   *
+   * Validating a named plan reads that plan type's page, which Workday badges
+   * "Reviewed" on the enrollment — no election changes.
+   */
+  async planBenefitUpdate(opts: {
+    event?: string;
+    changes: BenefitChangeInput[];
+    action: BenefitAction;
+  }): Promise<BenefitUpdatePlan> {
+    const { open } = await this.benefitInbox();
+    if (!open.length) throw new Error('No open benefit event in your Workday inbox — nothing to change.');
+    const chosen = pickBenefitEvent(open, opts.event);
+    const eventPage = parseEnrollmentEvent(await this.getRedacted(chosen.uri as string));
+    if (!eventPage.startUri) {
+      throw new Error(`"${chosen.title}" did not open into its elections, so it cannot be changed here.`);
+    }
+    const landingPage = parseEnrollmentLanding(await this.getRedacted(eventPage.startUri));
+    const elected = chosen.detailsUri
+      ? electionsFromGrid(
+          (await this.getTask(chosen.detailsUri)).grids.find((g) => /elected/i.test(g.label)) ?? {
+            label: '',
+            columns: [],
+            rows: [],
+          }
+        ).elections
+      : [];
+    const amountOf = (planType: string): number | undefined => {
+      const row = elected.find((e) => squash(e.plan).startsWith(`${squash(planType)} - `));
+      return row?.coverage && /annual/i.test(row.coverage) ? money(row.coverage) : undefined;
+    };
+    const fmtAmount = (n: number) => `${formatMoney(n)} a year`;
+
+    const seen = new Set<string>();
+    const steps: BenefitUpdatePlan['steps'] = [];
+    const changes: BenefitChangePreview[] = [];
+    const unchanged: string[] = [];
+    for (const c of opts.changes) {
+      const card = pickByLabel(landingPage.planTypes, (t) => t.planType, c.planType, 'plan type in this enrollment');
+      if (seen.has(card.planType)) throw new Error(`${card.planType} is changed more than once — give one change per plan type.`);
+      seen.add(card.planType);
+      if (!card.uri) throw new Error(`${card.planType} has no page to change it on.`);
+      const amount = c.annualContribution;
+      if (c.waive && (c.plan || amount !== undefined)) {
+        throw new Error(`${card.planType}: waive it, or choose a plan / amount — not both.`);
+      }
+      if (!c.waive && !c.plan && amount === undefined) {
+        throw new Error(`${card.planType}: say what to change — a \`plan\`, \`waive: true\`, or an \`annualContribution\`.`);
+      }
+      if (amount !== undefined && !(Number.isFinite(amount) && amount > 0 && amount < 1_000_000)) {
+        throw new Error(`${card.planType}: annualContribution must be a positive amount in dollars.`);
+      }
+      const current = card.waived ? 'Waived' : card.current ?? '(none)';
+      const currentAmount = amountOf(card.planType);
+      if (c.waive) {
+        if (card.waived) {
+          unchanged.push(`${card.planType} (already waived)`);
+          continue;
+        }
+        steps.push({ planType: card.planType, uri: card.uri, waive: true });
+        changes.push({ planType: card.planType, from: current, to: 'Waived' });
+        continue;
+      }
+      let plan = c.plan;
+      if (plan) {
+        const options = parsePlanOptions(await this.getRedacted(card.uri));
+        plan = pickByLabel(options?.plans ?? [], (p) => p.plan, plan, `${card.planType} plan`).plan;
+      } else {
+        if (card.waived || !card.current) {
+          throw new Error(`${card.planType} is waived: name the \`plan\` to enroll in along with the amount.`);
+        }
+        plan = card.current;
+      }
+      const planSame = !card.waived && squash(plan) === squash(card.current ?? '');
+      const amountSame = amount === undefined || currentAmount === amount;
+      if (planSame && amountSame) {
+        unchanged.push(`${card.planType} (already ${plan}${amount !== undefined ? `, ${fmtAmount(amount)}` : ''})`);
+        continue;
+      }
+      steps.push({
+        planType: card.planType,
+        uri: card.uri,
+        ...(planSame ? {} : { plan }),
+        ...(amount !== undefined ? { annualContribution: amount } : {}),
+      });
+      changes.push({
+        planType: card.planType,
+        from: amount !== undefined && currentAmount !== undefined ? `${current}, ${fmtAmount(currentAmount)}` : current,
+        to: amount !== undefined ? `${plan}, ${fmtAmount(amount)}` : plan,
+      });
+    }
+    if (opts.action === 'save' && !changes.length) {
+      throw new Error('Nothing to save: every change given is already in place.');
+    }
+    const revision = createHash('sha256')
+      .update(
+        JSON.stringify([
+          landingPage.projectedCost ?? null,
+          landingPage.planTypes.map((t) => [t.planType, t.current ?? null, t.waived]),
+          elected.map((e) => [e.plan, e.coverage ?? null, e.youPay ?? null]),
+        ])
+      )
+      .digest('hex');
+    return {
+      event: chosen.title,
+      inboxUri: chosen.uri as string,
+      ...(chosen.detailsUri ? { detailsUri: chosen.detailsUri } : {}),
+      startUri: eventPage.startUri,
+      action: opts.action,
+      steps,
+      preview: {
+        event: chosen.title,
+        ...(eventPage.closes ? { deadline: eventPage.closes } : {}),
+        action: opts.action,
+        ...(landingPage.projectedCost ? { projectedCostNow: landingPage.projectedCost } : {}),
+        changes,
+        ...(unchanged.length ? { unchanged } : {}),
+      },
+      revision,
+    };
+  }
+
+  /** POST one flow step and require a change summary with no errors. */
+  private async flowValidate(params: Record<string, string>): Promise<void> {
+    const res = await this.postForm(`/${this.tenant}/flowController.htmld`, params);
+    const errors = pageErrors(res);
+    if (errors.length) throw new Error(errors.join(' '));
+    if (!res || typeof res !== 'object' || (res as { widget?: unknown }).widget !== 'changeSummary') {
+      throw new Error('Workday did not accept the change (no change summary came back).');
+    }
+  }
+
+  /** POST a step that moves to the next page, rejecting Workday errors. */
+  private async flowPage(path: string, params: Record<string, string>): Promise<unknown> {
+    const res = await this.postForm(this.resolvePath(path), params);
+    const errors = pageErrors(res);
+    if (errors.length) throw new Error(errors.join(' '));
+    return res;
+  }
+
+  /** Apply one plan type's change: select / waive, Confirm and Continue, set
+   *  an amount when asked, then close the sub-flow. */
+  private async applyPlanTypeStep(step: BenefitUpdatePlan['steps'][number]): Promise<void> {
+    const form = parsePlanTypeForm(await this.fetchJson(this.resolvePath(step.uri)));
+    if (!form) throw new Error('its page did not open as an editable plan choice.');
+    const eff: Record<string, string> = form.effective ? { effective: form.effective } : {};
+    const base = { _flowExecutionKey: form.flowKey, ...eff };
+    const set = async (id: string, paired: string, value: '1') =>
+      this.flowValidate({ ...base, _eventId_validate: id, [id]: value, 'change-summary': changeSummaryXml(paired, '0') });
+    try {
+      if (step.waive) {
+        for (const row of form.rows.filter((r) => r.selected)) await set(row.waiveId, row.electId, '1');
+      } else if (step.plan) {
+        const target = form.rows.find((r) => squash(r.plan) === squash(step.plan as string));
+        if (!target) throw new Error(`"${step.plan}" is no longer offered on it.`);
+        if (!target.selected) await set(target.electId, target.waiveId, '1');
+        for (const row of form.rows.filter((r) => r.selected && r !== target)) await set(row.waiveId, row.electId, '1');
+      }
+      let res = await this.flowPage(`/${this.tenant}/flowController.htmld`, { ...base, _eventId_submit: form.pageId });
+      const contribution = parseContributionForm(res);
+      if (step.annualContribution !== undefined && !contribution) {
+        throw new Error('Workday showed no contribution page for it, so the annual amount could not be set.');
+      }
+      if (contribution) {
+        const cBase = {
+          _flowExecutionKey: contribution.flowKey,
+          ...(contribution.effective ? { effective: contribution.effective } : eff),
+        };
+        if (step.annualContribution !== undefined) {
+          await this.flowValidate({
+            ...cBase,
+            _eventId_validate: contribution.annualId,
+            [contribution.annualId]: String(step.annualContribution),
+          });
+        }
+        res = await this.flowPage(`/${this.tenant}/flowController.htmld`, { ...cBase, _eventId_submit: contribution.pageId });
+      }
+      if (!hasWidget(res, 'slimConclusion')) {
+        throw new Error('Workday did not confirm the change (no conclusion page came back).');
+      }
+    } finally {
+      // Close the sub-flow the way the web app does. Best effort.
+      if (form.cancelUri) {
+        try {
+          await this.postForm(this.resolvePath(form.cancelUri), eff);
+        } catch {
+          // The sub-flow expires with its page context anyway.
+        }
+      }
+    }
+  }
+
+  /**
+   * Send a planned enrollment change: each plan type in turn, then Save for
+   * Later or Review and Sign → I Accept → Submit. Every step must come back
+   * as Workday's own acknowledgement; the first that does not stops the
+   * write — before any save or submit — and the error says which plan types
+   * had already changed in the open enrollment. Then a re-read verifies it.
+   *
+   * Callers MUST gate this behind `confirmWrite` with the plan's preview and
+   * revision — see `workday_update_benefit_enrollment`.
+   */
+  async applyBenefitUpdate(plan: BenefitUpdatePlan): Promise<BenefitUpdateResult> {
+    const done: string[] = [];
+    const stop = (where: string, e: unknown): never => {
+      throw new Error(
+        `Stopped at ${where}: ${messageOf(e)} ` +
+          (done.length
+            ? `Already changed in the open enrollment (not saved or submitted by this call): ${done.join(', ')}. `
+            : 'Nothing was changed. ') +
+          'Open the enrollment in Workday to check before retrying.'
+      );
+    };
+    for (const step of plan.steps) {
+      try {
+        await this.applyPlanTypeStep(step);
+      } catch (e) {
+        stop(step.planType, e);
+      }
+      done.push(step.planType);
+    }
+
+    const actions = parseLandingActions(await this.fetchJson(this.resolvePath(plan.startUri)));
+    if (plan.action === 'save') {
+      try {
+        if (!actions.save) throw new Error('the enrollment page has no Save for Later button.');
+        const modal = parseSaveModal(await this.flowPage(actions.save, {}));
+        if (!modal) throw new Error('Workday did not show the "Save Without Submitting?" confirmation.');
+        const saved = await this.flowPage(`/${this.tenant}/flowController.htmld`, {
+          _flowExecutionKey: modal.flowKey,
+          _eventId_submit: modal.pageId,
+          'change-summary': changeSummaryXml(modal.confirmId, '1'),
+        });
+        if (!isSavedPage(saved)) throw new Error('Workday did not confirm the save.');
+      } catch (e) {
+        stop('Save for Later', e);
+      }
+    } else {
+      try {
+        if (!actions.review) throw new Error('the enrollment page has no Review and Sign button.');
+        const sign = parseSignForm(await this.flowPage(actions.review, {}));
+        if (!sign) throw new Error('the Review and Sign page has no signature and Submit button.');
+        const base = { _flowExecutionKey: sign.flowKey };
+        await this.flowValidate({ ...base, _eventId_validate: sign.signatureId, [sign.signatureId]: '1' });
+        await this.flowValidate({
+          ...base,
+          _eventId_add: sign.bar.id,
+          [sign.bar.id]: sign.bar.submit,
+          [`${sign.bar.submit}_DID`]: 'Submit',
+          [`${sign.bar.submit}_IID`]: sign.bar.submit,
+        });
+        const submitted = await this.flowPage(`/${this.tenant}/flowController.htmld`, {
+          ...base,
+          _eventId_submit: sign.pageId,
+        });
+        if (!isSubmittedPage(submitted)) throw new Error('Workday did not confirm the submission.');
+      } catch (e) {
+        stop('Review and Sign', e);
+      }
+    }
+
+    // Verify by re-reading the event's own record of its elections.
+    const notes: string[] = [];
+    let verified = true;
+    if (plan.detailsUri) {
+      const details = await this.getTask(plan.detailsUri);
+      const electedGrid = details.grids.find((g) => /elected/i.test(g.label));
+      const elected = electedGrid ? electionsFromGrid(electedGrid).elections : [];
+      const waived = (details.grids.find((g) => /waived/i.test(g.label))?.rows ?? [])
+        .map((r) => squash(Object.values(r.cells)[0] ?? ''));
+      const wrong = plan.steps.filter((s) => {
+        const type = squash(s.planType);
+        if (s.waive) return !waived.includes(type);
+        const row = elected.find((e) => squash(e.plan).startsWith(`${type} - `));
+        if (!row) return true;
+        if (s.plan && squash(row.plan) !== `${type} - ${squash(s.plan)}`) return true;
+        if (s.annualContribution !== undefined && money(row.coverage) !== s.annualContribution) return true;
+        return false;
+      });
+      if (wrong.length) verified = false;
+      notes.push(
+        wrong.length
+          ? `Re-read the event: ${wrong.map((s) => s.planType).join(', ')} did not read back as changed.`
+          : `Re-read the event: ${plan.steps.length ? plan.steps.map((s) => s.planType).join(', ') + ' read back as changed' : 'elections read back'}.`
+      );
+    }
+    if (plan.action === 'submit') {
+      const { open } = await this.benefitInbox();
+      const still = open.some((i) => i.uri === plan.inboxUri);
+      if (still) verified = false;
+      notes.unshift(
+        still
+          ? 'The enrollment is STILL in your inbox after Submit — check it in Workday.'
+          : 'The enrollment is no longer waiting in your inbox: it was submitted.'
+      );
+    } else {
+      notes.unshift('Saved for later: nothing is submitted until Review and Sign.');
+    }
+    return {
+      event: plan.event,
+      action: plan.action,
+      changes: plan.preview.changes,
+      verified,
+      verification: notes.join(' '),
     };
   }
 

@@ -8,6 +8,7 @@ import { registerPeopleTools } from '../src/tools/people.js';
 import { registerRawTools } from '../src/tools/raw.js';
 import { registerReviewTools } from '../src/tools/review.js';
 import { registerRequestTools } from '../src/tools/requests.js';
+import { registerBenefitTools } from '../src/tools/benefits.js';
 import type { BridgeProbeResult, BridgeStatus, WorkdayTransport } from '../src/transport.js';
 
 /**
@@ -18,8 +19,9 @@ import type { BridgeProbeResult, BridgeStatus, WorkdayTransport } from '../src/t
  * claim to be destructive. Reads the annotations off the wire (tools/list),
  * not a hand-kept list.
  *
- * workday-mcp's one write is workday_update_request (confirm-gated), so the
- * write checks below hold it to an explicit destructiveHint.
+ * workday-mcp's two writes are workday_update_request and
+ * workday_update_benefit_enrollment (both confirm-gated), so the write checks
+ * below hold them to an explicit destructiveHint.
  */
 interface Ann { readOnlyHint?: unknown; destructiveHint?: unknown; openWorldHint?: unknown }
 
@@ -50,6 +52,7 @@ beforeAll(async () => {
     registerRawTools(s, client);
     registerReviewTools(s, client);
     registerRequestTools(s, client);
+    registerBenefitTools(s, client);
   });
   ann = Object.fromEntries(
     (await harness.client.listTools()).tools.map((t) => [t.name, t.annotations as Ann | undefined]),
@@ -61,7 +64,7 @@ afterAll(async () => {
 
 describe('tool annotations', () => {
   it('covers the full surface (guards against a registrar being dropped here)', () => {
-    expect(Object.keys(ann)).toHaveLength(19);
+    expect(Object.keys(ann)).toHaveLength(22);
   });
 
   it('sets an explicit boolean readOnlyHint on every tool', () => {
@@ -88,11 +91,12 @@ describe('tool annotations', () => {
     expect(Object.entries(ann).filter(([, a]) => a?.openWorldHint !== true).map(([n]) => n)).toEqual([]);
   });
 
-  it('has exactly one write — the confirm-gated request update — and no other', () => {
+  it('has exactly two writes — the confirm-gated request and benefits updates — and no other', () => {
     // A new write must be added here on purpose, with a confirmWrite gate and
     // a gate test (see tests/tool-request-write.test.ts).
     expect(Object.entries(ann).filter(([, a]) => a?.readOnlyHint !== true).map(([n]) => n)).toEqual([
       'workday_update_request',
+      'workday_update_benefit_enrollment',
     ]);
   });
 });

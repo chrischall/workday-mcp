@@ -244,6 +244,113 @@ All plain GETs unless noted, and every hop is matched by LABEL:
 - **My Requests** — delivered task `3005$4617`: a grid of Request, Type,
   Request ID, Description, Status, Resolution, Initiation / Completion Date.
 
+### Benefits and open enrollment (captured 2026-11)
+
+All plain GETs, every hop matched by LABEL:
+
+- **Your Benefits catalog.** The envelope's `currentUser.relatedTasksLink`
+  (`/inst/<you>/rel-tasks`) is a `relatedTasks` widget: nested
+  `taskGroups[]` → `tasks[]` of `{label, uri, folder, view}`. The **Benefits**
+  folder holds "View My Current Benefit Elections", "View My Benefit Election
+  History", "View My Beneficiaries", "View Dependents" (`view: true`) and
+  "Change Benefits" (`view: false` — starts a life-event process; never
+  fetched). `view` is Workday's own read/action flag.
+- **Current elections.** The elections task is a card deck (one `card` per
+  plan, `title` = plan type, `subtitle` = plan). Its **"View as Grid"**
+  (a GET `commandButton`) is one `grid` "Current Benefit Elections and Costs":
+  Benefit Plan, Coverage / Deduction Begin Date, Coverage, Calculated
+  Coverage, Dependents, Beneficiaries, Employee Cost and Employer Contribution
+  (each "(Per Pay Period (Semi-Monthly))"). The last row has no plan — it is
+  the totals. Dependents/Beneficiaries cells join names with ", "; the row's
+  references name each one exactly.
+- **An open event** is an inbox item whose type is "Change Benefits for …"
+  and whose task is "Open" (the same type with task "To Do" is a leftover
+  step such as dependent documentation). Its `taskToExecute` GET is
+  `Benefits_Enrollment_Inbox`: a `richTextArea`
+  (`wd:EventTypeWithStartandEndDates`) reading
+  "USA Annual Enrollment 10/26/2026-11/08/2026" — the window — and a GET
+  `commandButton` "Let's Get Started" (`actionId: view`).
+- **"View Details"** on that inbox item ("View Event", `2997$3463`) has grids
+  "Elected Coverages" (same columns as the current-elections grid, with
+  NEXT year's costs — last year rolled over until changed), "Waived
+  Coverages", "Beneficiary Designations" and "Process History".
+- **"Let's Get Started"** → `Benefits_Enrollment_Landing_Page`: a
+  `stylizedHeader` with the projected total, then `panel`s ("Health Care and
+  Accounts", "Insurance", "Additional Benefits") of `card`s — `title` = plan
+  type, `subtitle` = current plan or "Waived", `footerButtons[0]` "Manage" /
+  "Enroll" with a GET `taskUri`. The footer `commandButtonList` holds
+  **"Save for Later" and "Review and Sign" — POSTs; never sent.**
+- **A plan type's page** (the card's `taskUri`) is `mode: EDIT` with a
+  `flowExecutionKey`, but a GET of it saves nothing: only its "Confirm and
+  Continue" (a POST) would. It holds a **`chunkedEditGrid`** (not `grid` —
+  `parseTask` does not read it) "Plans Available": `columns[]` map
+  `columnId` → label (Benefit Plan, Selection, "You Pay" or "You
+  Contribute", Company Contribution); each `rows[].cellsMap` has the plan as a
+  GET `commandButton` (label = plan, uri = its details page), the selection as
+  `checkBoxInput`s "Select" / "Waive" (`value: true` on the chosen one), and
+  the costs as text. `maxLengthValueRow` / `maxWordLengthValueRow` are layout
+  hints that duplicate a row — not plans. Notes are `text` widgets
+  `wd:Help_Text` and `wd:Benefit_Message` (which plans exclude each other);
+  instructions are `richTextArea` `wd:Enrollment_Instructional_Text`.
+- **A plan's details** (`/inst/<plan>/rel-task/2998$43660`): a
+  "Provider Website" `monikerList` (URL-encoded `target`), and a `panelList`
+  of rate rows — each a `fieldSet` pairing a `wd:Formatted_Currency` text with
+  a coverage-level `monikerList` ("Associate + Child(ren)").
+- **Verified live:** after every one of these pages was read, Benefit
+  Election History still showed the event "Not Started" and no election
+  changed. **But opening a plan type's page is not invisible:** the web app
+  afterwards badged every opened plan-type card "Reviewed". That is
+  Workday's own progress marker, not an election.
+
+### Making an election (captured 2026-11, from the user's own browser)
+
+Implemented by `workday_update_benefit_enrollment` (`planBenefitUpdate` /
+`applyBenefitUpdate`), confirm-gated.
+
+Waiving one plan type, then Save for Later. Every POST carries
+`sessionSecureToken` (body) and `_flowExecutionKey` from the page just
+loaded; row ids (`582`) and body ids are renumbered on every load.
+
+1. `GET` the plan type's page (the landing card's `taskUri`).
+2. `POST /{t}/flowController.htmld` — `_eventId_validate=<row>/wd:Waive`,
+   `<row>/wd:Waive=1`, plus a `change-summary` XML of the paired radio
+   (`<wd:Elect Ref="<row>/wd:Elect"><V>0</V></wd:Elect>`). Selecting a plan is
+   the same with `wd:Elect=1`. → `changeSummary` of `update`s.
+3. `POST flowController` — `_eventId_submit=<page body id>`: **Confirm and
+   Continue**. → `slimConclusion`; the choice is now held on the event
+   (the landing page's projected cost changes) but nothing is submitted.
+4. `POST /{t}/seamless/cancel/task:<task>,instance:<inst>,created:<ms>.htmld`
+   — the page's `seamlessSaveCancelUri`, closing the sub-flow (`{"result":"Ok"}`).
+5. **Save for Later**: `POST` the landing page's "Save for Later" button uri
+   (`/{t}/button/<ctx>/38/<n>.htmld`, empty body) → a "Save Without
+   Submitting?" modal; then `POST flowController` — `_eventId_submit=<modal
+   body id>` with change-summary `<wd:Confirm Ref="<id>/wd:Confirm"><V>1</V>`
+   → "Save For Later Confirmation": the draft's Submit Elections By date,
+   total cost, and Elected / Waived / Beneficiary grids.
+   **A contribution amount (HSA, FSA)** adds a second page: step 3's
+   `_eventId_submit` returns a "Contribute" page (`currencyInput`s Per
+   Paycheck / Annual, a Maximum Annual Amount, a Summary with the company
+   contribution, and the plan's limits in its instructions). Then
+   `POST flowController` — `_eventId_validate=<id>/wd:Annual_Contribution`,
+   `<id>/wd:Annual_Contribution=7800`, `effective=2027-01-01-08:00` →
+   `changeSummary` (per-paycheck recalculated); then `_eventId_submit=<body
+   id>` ("Save") → `slimConclusion`, then the seamless cancel. Every POST on
+   this page carries the event's `effective` date.
+6. **Review and Sign** — `POST` the landing page's "Review and Sign" button
+   uri (`/{t}/button/<ctx>/32/<n>.htmld`, empty body) → "View Summary": a
+   `chunkedEditGrid` of Selected Benefits, Waived Benefits, Total Benefits
+   Cost, the Electronic Signature text, and a `bpfButtonBar`.
+7. **Sign** — `POST flowController` —
+   `_eventId_validate=<id>/wd:Employee_Enrollment_Event_Electronic_Signature`,
+   `<id>/wd:Employee_Enrollment_Event_Electronic_Signature=1` ("I Accept").
+8. **Submit** — the same `bpfButtonBar` pattern as a request:
+   `_eventId_add=<barId>`, `<barId>=934$20`, `934$20_DID=Submit`,
+   `934$20_IID=934$20` → `changeSummary`; then `_eventId_submit=<body id>`
+   → `Benefits_Enrollment_Submitted_Successfully_View` ("You've submitted
+   your elections", effective date, final day to update). Captured live
+   2026-11-06 submitting the user's own 2027 elections at their request.
+
+
 ### Revising a request (captured 2026-10)
 
 An open request is the inbox's **"Revise Request"** task
