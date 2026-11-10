@@ -159,3 +159,32 @@ export const templateChosen = {
     },
   ],
 };
+
+/** A template whose question carries a blank to fill in — the live
+ *  "Aspiring Leader" template's shape. */
+export const templateWithBlank = {
+  widget: 'changeSummary',
+  changes: [
+    { widget: 'addChild', fieldName: 'instances', children: [{ widget: 'moniker', instanceId: '12503$4', text: 'Aspiring Leader', id: '1370' }], containerId: '949' },
+    {
+      widget: 'addChild',
+      fieldName: 'panels',
+      children: [
+        {
+          widget: 'panel',
+          id: '1600',
+          allowRemove: true,
+          children: [
+            {
+              widget: 'richTextAreaInput',
+              label: 'Question',
+              value: '<p style="text-align:left">I’d like your feedback on how I’m doing on <b>[ENTER BEHAVIOR]</b>. What is your suggestion?</p>',
+              id: '1600/wd:Feedback_Question',
+            },
+          ],
+        },
+      ],
+      containerId: '956.217',
+    },
+  ],
+};

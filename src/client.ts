@@ -64,9 +64,11 @@ import {
 } from './parse-reports.js';
 import {
   feedbackHtml,
+  fillBlanks,
   parseFeedbackForm,
   questionFieldIds,
-  summaryQuestions,
+  questionText,
+  summaryQuestionFields,
   type FeedbackForm,
   type FeedbackSharing,
 } from './parse-feedback.js';
@@ -506,6 +508,9 @@ export interface RequestFeedbackInput {
   questions?: string[];
   /** Who sees the answers; omit to keep the form's default. */
   sharing?: FeedbackSharing;
+  /** Values for a template's `[BLANK]`s, by blank name, e.g.
+   *  `{ "ENTER BEHAVIOR": "delegating" }`. */
+  fill?: Record<string, string>;
 }
 
 export interface RequestFeedbackPreview {
@@ -1829,7 +1834,9 @@ export class WorkdayClient {
         const v = await this.addPromptValue(flowKey, f.template, input.template, true);
         template = v.text;
         ids.push(v.instanceId);
-        questions.push(...summaryQuestions(v.summary));
+        questions.push(...(await this.fillTemplateBlanks(flowKey, template, v.summary, input.fill ?? {})));
+      } else if (input.fill && Object.keys(input.fill).length) {
+        throw new Error('`fill` fills a template\'s blanks; pass `template` too, or put the text in your own `questions`.');
       }
       for (const q of custom) {
         const row = await this.flowStep(flowKey, { _eventId_add: f.questionList });
@@ -1858,6 +1865,51 @@ export class WorkdayClient {
     } finally {
       if (!committed) await this.cancelFlow(flowKey);
     }
+  }
+
+  /**
+   * A chosen template's questions, with any `[BLANK]`s filled in. Workday
+   * puts the template's questions on the form as ordinary rich-text fields,
+   * so a filled question is written back into the template's own field. A
+   * blank without a value — or a value for a blank the template lacks — is
+   * refused, naming the blanks, so the caller can ask the user.
+   */
+  private async fillTemplateBlanks(
+    flowKey: string,
+    template: string,
+    summary: Record<string, unknown> | undefined,
+    fill: Record<string, string>
+  ): Promise<string[]> {
+    const fields = summaryQuestionFields(summary);
+    const blanks = [...new Set(fields.flatMap((q) => q.blanks))];
+    const known = new Set(blanks.map((b) => b.toLowerCase()));
+    const unknown = Object.keys(fill).find((k) => !known.has(k.trim().toLowerCase()));
+    if (unknown !== undefined) {
+      throw new Error(
+        `The "${template}" template has no blank named "${unknown}". ` +
+          (blanks.length ? `Its blanks: ${blanks.map((b) => `[${b}]`).join(', ')}.` : 'It has no blanks to fill.')
+      );
+    }
+    const given = new Set(Object.keys(fill).map((k) => k.trim().toLowerCase()));
+    const open = blanks.filter((b) => !given.has(b.toLowerCase()));
+    if (open.length) {
+      const example = fields.find((q) => q.blanks.includes(open[0]!))?.text;
+      throw new Error(
+        `The "${template}" template has blank(s) to fill in: ${open.map((b) => `[${b}]`).join(', ')}. Ask the ` +
+          `user what each should say and pass \`fill\`, e.g. {"${open[0]}": "…"}. The question reads: "${example}"`
+      );
+    }
+    const out: string[] = [];
+    for (const q of fields) {
+      if (!q.blanks.length) {
+        out.push(q.text);
+        continue;
+      }
+      const html = fillBlanks(q.html, fill);
+      await this.flowStep(flowKey, { _eventId_validate: q.id, [q.id]: html });
+      out.push(questionText(html));
+    }
+    return out;
   }
 
   /** Preview a feedback request: drives the form up to Submit and cancels

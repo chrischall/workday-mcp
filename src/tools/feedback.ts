@@ -84,7 +84,8 @@ export function registerFeedbackTools(server: McpServer, client: WorkdayClient):
         'about someone on your team or under you (`about`, "Get Feedback on Associate" — Workday offers no ' +
         'peers or managers there). `from` lists who to ask, by ' +
         'name. Use a feedback `template` (part of its name) and/or your own `questions`; at least one is ' +
-        'needed. `sharing` sets who sees the answers (e.g. `confidential` keeps them from the person they are ' +
+        'needed. Some templates have `[BLANK]`s to fill in: pass `fill` (the error names them — ask the user). ' +
+        '`sharing` sets who sees the answers (e.g. `confidential` keeps them from the person they are ' +
         'about). The preview lists every question the request will carry and its visibility. Each person ' +
         'asked gets a task in their Workday inbox. After submitting, Feedback Requested is re-read to ' +
         `verify. ${CONFIRM_FLOW_SENTENCE} ${CONFIRM_INJECTION_RULE}`,
@@ -108,13 +109,22 @@ export function registerFeedbackTools(server: McpServer, client: WorkdayClient):
           ),
         template: z.string().min(1).optional().describe('A feedback template, by part of its name.'),
         questions: z.array(z.string().min(1)).optional().describe('Your own questions, plain text.'),
+        fill: z
+          .record(z.string(), z.string().min(1))
+          .optional()
+          .describe(
+            'Text for a template\'s `[BLANK]`s, by blank name, e.g. `{"ENTER BEHAVIOR": "delegating"}`. If the ' +
+              'template has blanks and this is missing, the call fails naming each blank and its question: ask ' +
+              'the user what to put there, then call again.'
+          ),
         sharing: sharingArg,
         confirmToken: confirmTokenParam,
       }),
     },
-    async ({ from, about, template, questions, sharing, confirmToken }, ctx) => {
+    async ({ from, about, template, questions, fill, sharing, confirmToken }, ctx) => {
       const input = {
         from,
+        ...(fill && Object.keys(fill).length ? { fill } : {}),
         ...(sharing ? { sharing } : {}),
         ...(about ? { about } : {}),
         ...(template ? { template } : {}),

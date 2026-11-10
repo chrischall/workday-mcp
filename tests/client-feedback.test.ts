@@ -7,7 +7,7 @@ import type {
   BridgeStatus,
   BridgeProbeResult,
 } from '../src/transport.js';
-import { associatePrompt, giveForm, questionRowAdded, requestForm, templateChosen } from './feedback-fixtures.js';
+import { associatePrompt, giveForm, questionRowAdded, requestForm, templateChosen, templateWithBlank } from './feedback-fixtures.js';
 
 type Route = unknown | ((init: FetchInit) => unknown);
 
@@ -195,7 +195,12 @@ function requestRoutes(opts: { about?: boolean } = {}) {
       const q = new URLSearchParams(init.body).get('q');
       return { items: [{ instanceId: q === 'Sam Roe' ? '247$11' : '247$12', text: q }] };
     },
-    'POST /acme/prompt/c3/949.htmld': { items: [{ instanceId: '12503$1', text: 'Feedback on Me' }] },
+    'POST /acme/prompt/c3/949.htmld': {
+      items: [
+        { instanceId: '12503$1', text: 'Feedback on Me' },
+        { instanceId: '12503$4', text: 'Aspiring Leader' },
+      ],
+    },
     [FLOW]: (init: FetchInit) => {
       const p = new URLSearchParams(init.body);
       if (p.get('_eventId_submit') === '72') return opts.about ? requestForm : {};
@@ -314,6 +319,45 @@ describe('WorkdayClient — request feedback', () => {
     const r = await client.applyRequestFeedback(plan);
     expect(r.verified).toBe(false);
     expect(r.verification).toMatch(/could not find/i);
+  });
+
+  it('refuses a template with an unfilled blank, naming the blank, and cancels', async () => {
+    const routes = requestRoutes();
+    const flow = routes['POST /acme/flowController.htmld'] as (i: FetchInit) => unknown;
+    (routes as Record<string, unknown>)['POST /acme/flowController.htmld'] = (init: FetchInit) =>
+      new URLSearchParams(init.body).get('_eventId_add') === '949' ? templateWithBlank : flow(init);
+    const { client, transport } = makeClient(routes);
+    await expect(client.planRequestFeedback({ from: ['Sam Roe'], template: 'aspiring' })).rejects.toThrow(
+      /blank.*\[ENTER BEHAVIOR\].*fill/s
+    );
+    expect(events(transport).at(-1)).toBe('_eventId_cancel=Cancel');
+  });
+
+  it('fills a template blank into the template\'s own question field and previews the result', async () => {
+    const routes = requestRoutes();
+    const flow = routes['POST /acme/flowController.htmld'] as (i: FetchInit) => unknown;
+    (routes as Record<string, unknown>)['POST /acme/flowController.htmld'] = (init: FetchInit) =>
+      new URLSearchParams(init.body).get('_eventId_add') === '949' ? templateWithBlank : flow(init);
+    const { client, transport } = makeClient(routes);
+    const plan = await client.planRequestFeedback({
+      from: ['Sam Roe'],
+      template: 'aspiring',
+      fill: { 'ENTER BEHAVIOR': 'delegating' },
+    });
+    const set = posts(transport).find((p) => p.get('_eventId_validate') === '1600/wd:Feedback_Question');
+    expect(set?.get('1600/wd:Feedback_Question')).toBe(
+      '<p style="text-align:left">I’d like your feedback on how I’m doing on <b>delegating</b>. What is your suggestion?</p>'
+    );
+    expect(plan.preview.questions).toEqual([
+      'I’d like your feedback on how I’m doing on delegating. What is your suggestion?',
+    ]);
+  });
+
+  it('refuses a fill for a blank the template does not have', async () => {
+    const { client } = makeClient(requestRoutes());
+    await expect(
+      client.planRequestFeedback({ from: ['Sam Roe'], template: 'feedback on me', fill: { BEHAVIOR: 'x' } })
+    ).rejects.toThrow(/no blank named "BEHAVIOR"/);
   });
 
   it('needs at least one question or a template', async () => {
