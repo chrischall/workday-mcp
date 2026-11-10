@@ -94,6 +94,13 @@ describe.each([
     expect(planSpy.mock.calls[0]![0]).toMatchObject({ sharing: 'confidential' });
   });
 
+  it.runIf(name === 'workday_request_feedback')('passes `fill` through to the plan', async () => {
+    const { client, tools } = harness();
+    const planSpy = vi.spyOn(client, planFn).mockResolvedValue(makePlan() as never);
+    await tools.get(name)!.cb({ ...args, template: 'aspiring', fill: { 'ENTER BEHAVIOR': 'delegating' } }, NO_ELICIT_CTX);
+    expect(planSpy.mock.calls[0]![0]).toMatchObject({ fill: { 'ENTER BEHAVIOR': 'delegating' } });
+  });
+
   it('refuses a token when Workday now resolves the form differently', async () => {
     const { client, tools } = harness();
     const planSpy = vi.spyOn(client, planFn).mockResolvedValue(makePlan('rev-1') as never);

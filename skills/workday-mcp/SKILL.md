@@ -140,6 +140,9 @@ reuses that live session — there is no separate login.
   feedback on yourself, or on someone on your team or under you (`about` —
   Workday's Get Feedback on Associate offers no peers or managers), using a
   `template` and/or your own `questions`, and the same `sharing` choice —
+  (a template may have `[BLANK]`s such as `[ENTER BEHAVIOR]`: the call then
+  fails naming them and quoting the question — ask the user what goes there
+  and call again with `fill: {"ENTER BEHAVIOR": "…"}`) —
   `confidential` keeps the answers from the person they are about. Same confirm gate; the preview lists
   every question, including the template's. Each person asked gets an inbox
   task once it is submitted.

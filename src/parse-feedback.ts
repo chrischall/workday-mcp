@@ -164,6 +164,48 @@ function addedQuestionFields(summary: unknown): Obj[] {
   return out;
 }
 
+/** A question a change put on the form, with what is needed to rewrite it. */
+export interface SummaryQuestionField {
+  id: string;
+  /** The question as Workday stored it (rich text). */
+  html: string;
+  text: string;
+  /** Its `[BLANK]`s to fill in, e.g. `ENTER BEHAVIOR`. */
+  blanks: string[];
+}
+
+/** Rich text → plain text, minus the zero-width spaces Workday appends. */
+export function questionText(html: string): string {
+  return stripHtml(html).replace(/​/g, '').trim();
+}
+
+/** The questions a change added (a template's), with their field ids. */
+export function summaryQuestionFields(summary: unknown): SummaryQuestionField[] {
+  return addedQuestionFields(summary)
+    .map((o) => {
+      const html = str(o.value) ?? '';
+      const text = questionText(html);
+      return { id: o.id as string, html, text, blanks: questionBlanks(text) };
+    })
+    .filter((q) => q.text);
+}
+
+/** The `[BLANK]` placeholders in a question — a template's "fill this in"
+ *  slots, like `[ENTER BEHAVIOR]` — each once, in order. */
+export function questionBlanks(text: string): string[] {
+  return [...new Set([...text.matchAll(/\[([^[\]]+)\]/g)].map((m) => m[1]!.trim()))];
+}
+
+/** Replace `[BLANK]`s in a question's HTML with the values given by blank
+ *  name (case-insensitive), escaped; markup and unknown blanks are kept. */
+export function fillBlanks(html: string, fill: Record<string, string>): string {
+  const byName = new Map(Object.entries(fill).map(([k, v]) => [k.trim().toLowerCase(), v]));
+  return html.replace(/\[([^[\]]+)\]/g, (whole, name: string) => {
+    const v = byName.get(name.trim().toLowerCase());
+    return v === undefined ? whole : escapeHtml(v);
+  });
+}
+
 /** Ids of the question fields a row-add created. */
 export function questionFieldIds(summary: unknown): string[] {
   return addedQuestionFields(summary).map((o) => o.id as string);
@@ -171,9 +213,7 @@ export function questionFieldIds(summary: unknown): string[] {
 
 /** The questions a change put on the form (a template's), as plain text. */
 export function summaryQuestions(summary: unknown): string[] {
-  return addedQuestionFields(summary)
-    .map((o) => stripHtml(str(o.value) ?? '').replace(/​/g, '').trim())
-    .filter(Boolean);
+  return summaryQuestionFields(summary).map((q) => q.text);
 }
 
 const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { feedbackHtml, parseFeedbackForm, questionFieldIds, summaryQuestions } from '../src/parse-feedback.js';
-import { giveForm, questionRowAdded, requestForm, templateChosen } from './feedback-fixtures.js';
+import {
+  feedbackHtml,
+  fillBlanks,
+  parseFeedbackForm,
+  questionBlanks,
+  questionFieldIds,
+  summaryQuestionFields,
+  summaryQuestions,
+} from '../src/parse-feedback.js';
+import { giveForm, questionRowAdded, requestForm, templateChosen, templateWithBlank } from './feedback-fixtures.js';
 
 describe('parseFeedbackForm — Give Feedback', () => {
   it('reads the commit ids, the feedback field and the badge options', () => {
@@ -77,5 +85,36 @@ describe('feedbackHtml', () => {
 
   it('keeps single line breaks inside a paragraph', () => {
     expect(feedbackHtml('one\ntwo')).toBe('<p>one<br>two</p>');
+  });
+});
+
+describe('template blanks', () => {
+  it('lists each [BLANK] in a question once, in order', () => {
+    expect(questionBlanks('How am I doing on [ENTER BEHAVIOR] with [TEAM]? And [TEAM] again.')).toEqual([
+      'ENTER BEHAVIOR',
+      'TEAM',
+    ]);
+    expect(questionBlanks('No blanks here.')).toEqual([]);
+  });
+
+  it('reads a template question\'s field id, its HTML and its blanks', () => {
+    expect(summaryQuestionFields(templateWithBlank)).toEqual([
+      {
+        id: '1600/wd:Feedback_Question',
+        html: '<p style="text-align:left">I’d like your feedback on how I’m doing on <b>[ENTER BEHAVIOR]</b>. What is your suggestion?</p>',
+        text: 'I’d like your feedback on how I’m doing on [ENTER BEHAVIOR]. What is your suggestion?',
+        blanks: ['ENTER BEHAVIOR'],
+      },
+    ]);
+  });
+
+  it('fills blanks by name, case-insensitively, keeping the markup and escaping the value', () => {
+    expect(fillBlanks('<p>On <b>[ENTER BEHAVIOR]</b>?</p>', { 'enter behavior': 'delegating & <coaching>' })).toBe(
+      '<p>On <b>delegating &amp; &lt;coaching&gt;</b>?</p>'
+    );
+  });
+
+  it('leaves a blank it has no value for untouched', () => {
+    expect(fillBlanks('<p>[A] and [B]</p>', { A: 'x' })).toBe('<p>x and [B]</p>');
   });
 });

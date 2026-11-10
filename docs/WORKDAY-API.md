@@ -304,7 +304,10 @@ On the form (ids are per page load — find fields by label):
   a `richTextAreaInput` `…/wd:Feedback_Question` with the question as `value`.
 - a custom question: `_eventId_add=<editPanelList id>` → `changeSummary`
   whose new panel carries the `…/wd:Feedback_Question` field id; then validate
-  it like the feedback text.
+  it like the feedback text. A template's questions are the same editable
+  fields, so a template question with a `[BLANK]` placeholder (the live
+  "Aspiring Leader" has `[ENTER BEHAVIOR]`) is filled by validating its field
+  with the rewritten HTML — Workday acknowledges it with a `changeSummary`.
 - visibility ("Show my name?", "Make Feedback Anonymous", the "Feedback
   Sharing" radio's three checkboxes, expiration date) is `hideAdvice: ALWAYS`
   on this tenant: the form submits its defaults, so the preview states them.
