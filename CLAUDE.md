@@ -61,6 +61,10 @@ every request rides the user's signed-in `*.myworkday.com` tab.
   and ALWAYS cancels; like `getRequestForm` it refuses any page carrying a
   `bpfButtonBar`. `tools/reports.ts` registers `workday_run_report` and
   `workday_get_dashboard`.
+- `src/parse-feedback.ts` — the Give Feedback / Get Feedback forms: commit
+  ids, the feedback field, badge options, recipients and template prompts,
+  the question list, and the hidden visibility defaults (which the preview
+  states); plus changeSummary readers for added question rows.
 - `src/transport-fetchproxy.ts` — wraps `@chrischall/mcp-utils/fetchproxy`;
   `splitHost` maps `wd5.myworkday.com` → domain `myworkday.com` + subdomain `wd5`.
 - `src/tools/*.ts` — `registerXxxTools(server, client)` → `server.registerTool`.
@@ -75,8 +79,9 @@ See `docs/WORKDAY-API.md` for the captured endpoint shapes and the widget schema
 - **TDD.** Failing test → minimal code → green. The parser especially.
 - **Verify the parser against real bytes**, not just synthetic fixtures — the
   `propertyName`-vs-object-key bug only showed up against live data.
-- Reads only the user's own data. **There are two writes,
-  `workday_update_request` and `workday_update_benefit_enrollment`.** The
+- Reads only the user's own data. **There are four writes,
+  `workday_update_request`, `workday_update_benefit_enrollment`,
+  `workday_give_feedback` and `workday_request_feedback`.** The
   first (src/tools/requests.ts): `planRequestUpdate` (fresh read → diff → steps,
   sends nothing) → `confirmWrite` (token bound to request, action, answers,
   preview and a revision hash of the saved answers) → `applyRequestUpdate`
@@ -86,7 +91,13 @@ See `docs/WORKDAY-API.md` for the captured endpoint shapes and the widget schema
   event's current elections) → `applyBenefitUpdate`, which walks each plan
   type's sub-flow, then Save for Later or Review and Sign → I Accept →
   Submit, stopping at the first step Workday does not acknowledge and naming
-  the plan types already changed. Any new write must follow that shape and be added to the explicit
+  the plan types already changed. The feedback writes (src/tools/feedback.ts):
+  `planGiveFeedback` / `planRequestFeedback` drive the real form up to Submit
+  (people, badge, template resolved by Workday) and CANCEL it; the token's
+  revision is a hash of that preview plus every instance id it resolved; the
+  apply re-drives a fresh form, refuses to press Submit if the hash differs,
+  requires a changeSummary for every step, and re-reads Feedback Given /
+  Requested. Any new write must follow that shape and be added to the explicit
   write allowlist in tests/tool-annotations.test.ts.
 - Version lives once in `src/version.ts` (`x-release-please-version`); don't
   hand-bump — release-please owns it. `extra-files` in `release-please-config.json`

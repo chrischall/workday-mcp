@@ -284,6 +284,34 @@ All plain GETs unless noted, and every hop is matched by LABEL:
   replaying it from page JS still gets 400, so something else is required.
   Reports therefore resolve by id, URL, or a dashboard's worklets/links.
 
+### Giving and requesting feedback (captured 2026-11, up to Submit)
+
+Delivered tasks, the same ids on every tenant: **Give Feedback** `2997$3067`
+and **Get Feedback on Associate** `2997$2976` open with an associate prompt
+(the report-prompt dance: `_eventId_prompt` search, `_eventId_add`, then the
+prompt's `_eventId_submit=<body.id>`); **Get Feedback on Self** `2997$3241`
+opens straight on its form. "Feedback on My Team" (`3005$782`) is a report.
+
+On the form (ids are per page load — find fields by label):
+- feedback text: `richTextAreaInput` "Feedback" → `_eventId_validate=<id>`,
+  `<id>=<p>…</p>` → `changeSummary` (`update`).
+- badge: `dropDownSelectList` "Badge"; options carry `instanceId` →
+  `_eventId_add=<listId>`, `<listId>=<iid>`, `<iid>_DID`, `<iid>_IID`.
+- people to ask: `monikerListInput` "Who do you want to request feedback
+  from?" and the "Feedback Template" prompt — prompt search + `_eventId_add`
+  (with `_V`/`_PV`) → `changeSummary` (`addChild` instances). Choosing a
+  template also `removeChild`s the question rows and `addChild`s its own, each
+  a `richTextAreaInput` `…/wd:Feedback_Question` with the question as `value`.
+- a custom question: `_eventId_add=<editPanelList id>` → `changeSummary`
+  whose new panel carries the `…/wd:Feedback_Question` field id; then validate
+  it like the feedback text.
+- visibility ("Show my name?", "Make Feedback Anonymous", the "Feedback
+  Sharing" radio's three checkboxes, expiration date) is `hideAdvice: ALWAYS`
+  on this tenant: the form submits its defaults, so the preview states them.
+- commit: the same `bpfButtonBar` as a request — `_eventId_add=<barId>`,
+  `<barId>=934$20` (Submit; `934$14` is Save for Later), `_DID`, `_IID`, then
+  `_eventId_submit=<body.id>`. Cancel is `_eventId_cancel=Cancel`.
+
 ### Benefits and open enrollment (captured 2026-11)
 
 All plain GETs, every hop matched by LABEL:

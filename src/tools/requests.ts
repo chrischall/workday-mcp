@@ -15,7 +15,7 @@ import { workMeta } from './hints.js';
  * read them, and — behind the fleet confirm gate — change their answers and
  * Save for Later or Submit them.
  *
- * THE ONLY WRITES IN THIS SERVER. Every one goes through `confirmWrite`:
+ * Like every write in this server, each goes through `confirmWrite`:
  * phase 1 returns a preview and a single-use token and sends nothing; only a
  * repeat call carrying that token writes. The token is bound to the request,
  * the action, the exact answers, the preview, and a hash of the request's
