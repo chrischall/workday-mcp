@@ -244,6 +244,46 @@ All plain GETs unless noted, and every hop is matched by LABEL:
 - **My Requests** — delivered task `3005$4617`: a grid of Request, Type,
   Request ID, Description, Status, Resolution, Initiation / Completion Date.
 
+### Running reports, and dashboards (captured 2026-11)
+
+- **A report is a task** (`/{tenant}/task/<id>.htmld`; custom reports are
+  `1422$…`, delivered ones `2997$…`). Some answer the GET with their result
+  (`facetSearchResult` / a `grid`) and no flow. Others answer with a PROMPT page:
+  `flowExecutionKey`, `body.id` (the prompt's OK) and `*Input` widgets, often
+  with defaults already in `instances`.
+- **Running a prompt report** is the Create Request dance on the report's own
+  flow, all form-urlencoded POSTs carrying `_flowExecutionKey` and
+  `sessionSecureToken`:
+  1. remove a default: `POST /flowController.htmld` `_eventId_remove=<promptId>`,
+     `<promptId>=<instanceId>`;
+  2. search: `POST /prompt/<contextId>/<promptId>.htmld` `_eventId_prompt=<promptId>`,
+     `q=<text>` → `{items:[{instanceId,text}]}` (no `q` = browse; an empty
+     list means nothing is open to you);
+  3. add: `_eventId_add=<promptId>`, `<promptId>=<iid>`, `<iid>_DID=<text>`,
+     `<iid>_IID`, `<iid>_V=1`, `<iid>_PV=1`;
+  4. OK: `_eventId_submit=<body.id>` → the result page (grid + `header.excelLink`).
+  A rejected prompt returns 200 with `unassociatedErrorNodes:[{nodeId, message,
+  type}]` (`nodeId` = the prompt's id) — e.g. a default org outside the user's
+  security. The client always sends `_eventId_cancel` afterwards and refuses a
+  page that carries a `bpfButtonBar` (a business-process form, where OK submits).
+- **A task Workday will not run** answers 200 with an XML
+  `<wml:System_Error><wml:Message>…` body, not JSON (e.g. a comp-review
+  worklet when no review event is open). The client surfaces the message.
+- **Excel export** is async: `GET <excelLink.uri>?<requestParameters>` →
+  `{docReadyUri}`, then `GET /doc-ready/….xlsx` → the XLSX bytes. The bridge
+  carries text bodies only (binary would need fetchproxy's `download`
+  capability), so the tools return the parsed rows instead.
+- **Dashboards** are apps in the menu (`configuredAppsItem`, e.g. "Year End
+  Dashboard"). The page is a `landingPageGroup` of `landingPageTab`s (each
+  `/task/<taskIid>`) or a single `landingPage`. Worklets: the report is
+  `workletIid`. Menu groups ("Links to Reports"): `landingPageMenuItem.button`
+  is a `commandButton` with `taskId`/`uri` and `httpMethod: GET`.
+- **Search** (`/{tenant}/search.htmld?q=`) is still only a shell; results come
+  from `GET /wday/pex/fs/{tenant}/fs/v2/init?q=` sent with the `boot-config`
+  token, `Session-Secure-Token` and `X-WD-PEX-SEARCH-CORRELATION-ID` headers —
+  replaying it from page JS still gets 400, so something else is required.
+  Reports therefore resolve by id, URL, or a dashboard's worklets/links.
+
 ### Benefits and open enrollment (captured 2026-11)
 
 All plain GETs, every hop matched by LABEL:
@@ -391,15 +431,10 @@ Verified against 26 captured envelopes, 24 of which carried a live
 
 ## Follow-ons (not yet)
 
-- **Global search** — no GET-able `.htmld` (the inbox turned out to be a GET
-  JSON API; see above); served by the
-  GraphQL surface (`/wday/pex/graphql/graphql?operation=…`, POST). The
-  `workday_graphql` tool can reach it, but Workday does not publish the
-  operations, so the documents must be captured from the browser first.
+- **Global search** — served by `/wday/pex/fs/{tenant}/fs/v2/init` (see
+  "Running reports" above), which still refuses a replayed request.
 - **Direct reports** — solved without the POST-only `navigable` expansion: see
   "Review and promotion season" above (profile → Organizations → Members).
-- **Running prompted reports** — a POST of prompt values. Read-shaped, but a
-  POST; needs capture plus a decision on whether it counts as a write.
 - **Writes** (planned) — multi-step business processes, not single POSTs; each
   needs its own capture, a `confirm` gate, a dry-run `preview()`, and re-read
   verification.

@@ -8,6 +8,7 @@ import { registerRawTools } from '../src/tools/raw.js';
 import { registerReviewTools } from '../src/tools/review.js';
 import { registerRequestTools } from '../src/tools/requests.js';
 import { registerBenefitTools } from '../src/tools/benefits.js';
+import { registerReportTools } from '../src/tools/reports.js';
 import { WorkdayClient } from '../src/client.js';
 import type { WorkdayTransport, BridgeStatus, BridgeProbeResult } from '../src/transport.js';
 
@@ -49,6 +50,7 @@ describe('tool registration', () => {
     registerReviewTools(server, client);
     registerRequestTools(server, client);
     registerBenefitTools(server, client);
+    registerReportTools(server, client);
     expect(names).toEqual([
       'workday_healthcheck',
       'workday_get_apps',
@@ -72,6 +74,8 @@ describe('tool registration', () => {
       'workday_get_benefits',
       'workday_get_benefit_enrollment',
       'workday_update_benefit_enrollment',
+      'workday_run_report',
+      'workday_get_dashboard',
     ]);
   });
 });
@@ -93,6 +97,7 @@ describe('manifest.json tool list', () => {
     registerReviewTools(server, client);
     registerRequestTools(server, client);
     registerBenefitTools(server, client);
+    registerReportTools(server, client);
     expect(manifest.tools.map((t) => t.name).sort()).toEqual([...names].sort());
     for (const t of manifest.tools) expect(t.description, t.name).toBeTruthy();
   });

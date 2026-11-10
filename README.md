@@ -73,6 +73,8 @@ yourself, or check a release zip against the `.sha256` file published beside it
 | `workday_get_benefits` | Your current benefit elections — plan, coverage, dependents, beneficiaries, what you and the company pay per period — or your dependents, beneficiaries, election history |
 | `workday_get_benefit_enrollment` | An open enrollment event, read without changing it: the deadline, what's elected if you do nothing, cost changes vs today, and every plan on offer with prices (`rates: true` adds the price at each coverage level) |
 | `workday_update_benefit_enrollment` | **Write.** Choose or waive plans and set HSA/FSA amounts in an open enrollment, then Save for Later or sign and Submit — confirmation-token gated, verified by re-read |
+| `workday_run_report` | Run a report by task id (`1422$242`), its browser URL, or its name on one of your dashboards, and get its rows keyed by column. Prompt reports run with their defaults, or with `prompts` you pass by label; the prompt form is always cancelled afterwards and business-process forms are refused |
+| `workday_get_dashboard` | A dashboard (e.g. "Year End Dashboard") by name: every tab's worklets and report links, each with a `reportId` for `workday_run_report`; `run: true` runs every worklet too |
 | `workday_fetch` | Raw `.htmld` read with secrets redacted — the escape hatch for pages the parser doesn't model yet |
 | `workday_graphql` | Read-only GraphQL against Workday's PEX surface (mutations refused). The only route to Inbox / search |
 | `workday_healthcheck` | Verify the bridge + session end-to-end with an actionable hint |
@@ -105,6 +107,8 @@ workday_get_team_snapshot                               → grade, last promotio
 workday_get_request        { request: "20447$18949" }  → a draft's questions + saved answers
 workday_update_request     { request, answers: { "8": "…" }, action: "save" }  → preview + confirmToken
 workday_update_request     { …same…, confirmToken }     → writes, then re-reads to verify
+workday_get_dashboard      { dashboard: "year end" }    → worklets + report links, with reportIds
+workday_run_report         { report: "1422$242", prompts: { "Supervisory Organization": "My Org" } }
 ```
 
 ### Benefits enrollment season
