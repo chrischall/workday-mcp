@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/chrischall/workday-mcp/compare/v1.4.0...v1.5.0) (2026-11-10)
+
+
+### Features
+
+* **reports:** run Workday reports and open dashboards ([#192](https://github.com/chrischall/workday-mcp/issues/192)) ([3f97b44](https://github.com/chrischall/workday-mcp/commit/3f97b4459eb75821e8c89a7c70302642bf406ea7))
+
 ## [1.4.0](https://github.com/chrischall/workday-mcp/compare/v1.3.0...v1.4.0) (2026-11-06)
 
 
