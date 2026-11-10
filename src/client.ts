@@ -425,9 +425,6 @@ const DEFAULT_CRAWL_DEPTH = 1;
 const DEFAULT_MAX_CARDS = 12;
 const DEFAULT_CRAWL_CONCURRENCY = 4;
 
-/** Strip a leading anti-CSRF/guard prefix (anything before the first `{`)
- *  from a Workday JSON body. Live tenants currently emit clean JSON, but
- *  classic Workday endpoints have historically guarded it. */
 /** One table of a report's output. */
 export interface WorkdayReportTable {
   label?: string;
@@ -464,6 +461,9 @@ export interface WorkdayDashboard {
   tabs: Array<{ label: string; worklets: WorkdayDashboardWorklet[]; links: DashboardLink[] }>;
 }
 
+/** Strip a leading anti-CSRF/guard prefix (anything before the first `{`)
+ *  from a Workday JSON body. Live tenants currently emit clean JSON, but
+ *  classic Workday endpoints have historically guarded it. */
 export function stripJsonGuard(body: string): string {
   const start = body.indexOf('{');
   return start > 0 ? body.slice(start) : body;
@@ -1422,7 +1422,12 @@ export class WorkdayClient {
     const asked = Object.entries(opts.prompts ?? {});
     const reportId = await this.resolveReport(report);
     const page = (await this.fetchJson(`/${this.tenant}/task/${reportId}.htmld`)) as Record<string, unknown>;
-    const form = parseReportPrompts(page);
+    // Prompt labels and defaults are widget values, so read them from a
+    // redacted copy (as `getTask` does); only the flow key comes off the raw
+    // page, and it is posted back, never returned.
+    const parsed = parseReportPrompts(redactTree(page, { maxDepth: TYPED_REDACT_MAX_DEPTH }));
+    const rawFlowKey = typeof page.flowExecutionKey === 'string' ? page.flowExecutionKey : undefined;
+    const form = parsed && { okId: parsed.okId, prompts: parsed.prompts, ...(rawFlowKey ? { flowKey: rawFlowKey } : {}) };
     if (!form) {
       if (asked.length) {
         throw new Error(`This report takes no prompts; it ran without them. Drop \`prompts\` and retry.`);
@@ -1446,7 +1451,7 @@ export class WorkdayClient {
         _flowExecutionKey: flowKey,
         _eventId_submit: form.okId,
       })) as Record<string, unknown>;
-      const errors = parseReportErrors(result, form.prompts);
+      const errors = parseReportErrors(redactTree(result, { maxDepth: TYPED_REDACT_MAX_DEPTH }), form.prompts);
       if (errors.length) {
         throw new Error(
           `Workday did not run the report: ${errors.join(' ')} Prompts were: ${describePrompts(form.prompts)}. ` +

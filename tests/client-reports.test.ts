@@ -289,6 +289,28 @@ describe('WorkdayClient.runReport — a report behind a prompt form', () => {
     expect(JSON.stringify(r)).not.toContain('e1s1');
   });
 
+  it('redacts PII prompt defaults before returning or quoting them', async () => {
+    const withSsn = {
+      ...promptPage,
+      body: {
+        ...promptPage.body,
+        children: [
+          ...promptPage.body.children,
+          { widget: 'textInput', id: '190', label: 'Social Security Number', value: '123-45-6789' },
+        ],
+      },
+    };
+    const ok = makeClient({ ...promptRoutes(), '/acme/task/1422$242.htmld': withSsn });
+    const r = await ok.client.runReport('1422$242');
+    expect(JSON.stringify(r)).not.toContain('123-45-6789');
+    expect(posts(ok.transport)[0]!.get('_flowExecutionKey')).toBe('e1s1');
+
+    const bad = makeClient({ ...promptRoutes({ submit: errorPage }), '/acme/task/1422$242.htmld': withSsn });
+    const err = (await bad.client.runReport('1422$242').catch((e: Error) => e)) as Error;
+    expect(err.message).toMatch(/Supervisory Organization/);
+    expect(err.message).not.toContain('123-45-6789');
+  });
+
   it('never retries a flow POST after a timeout', async () => {
     const { client, transport } = makeClient(promptRoutes());
     await client.runReport('1422$242');
