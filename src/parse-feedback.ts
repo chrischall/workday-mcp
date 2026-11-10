@@ -39,6 +39,25 @@ export interface FeedbackPrompt {
   contextId: string;
 }
 
+/** Who sees the feedback — Workday's "Feedback Sharing" radio, whose three
+ *  choices are separate checkboxes: setting one clears the other two. */
+export type FeedbackSharing = 'everyone' | 'private' | 'confidential';
+
+export interface FeedbackSharingOption {
+  kind: FeedbackSharing;
+  /** The checkbox id: `_eventId_validate=<id>`, `<id>=1` selects it. */
+  id: string;
+  /** Workday's label, naming the person ("Don't share with Pat Doe"). */
+  label: string;
+  checked: boolean;
+}
+
+const SHARING_KINDS: Array<[RegExp, FeedbackSharing]> = [
+  [/Feedback_Confidential$/, 'confidential'],
+  [/Feedback_Private$/, 'private'],
+  [/Show_Feedback_to_Everyone$/, 'everyone'],
+];
+
 export interface FeedbackForm {
   /** The page body's id — `_eventId_submit` on it commits the form. */
   pageId: string;
@@ -54,6 +73,8 @@ export interface FeedbackForm {
   template?: FeedbackPrompt;
   /** Get Feedback: the repeating question list (`editPanelList`). */
   questionList?: string;
+  /** The sharing choices, when the form has them. */
+  sharing?: FeedbackSharingOption[];
   /** The visibility the form submits with — Workday hides these controls and
    *  sends their defaults, so a preview must say what they are. */
   visibility: string[];
@@ -74,7 +95,7 @@ export function parseFeedbackForm(root: unknown): FeedbackForm | undefined {
   let questionList: string | undefined;
   let showName: boolean | undefined;
   let anonymous: boolean | undefined;
-  let shared: string | undefined;
+  const sharing: FeedbackSharingOption[] = [];
   walk(root.body, (o) => {
     const widget = str(o.widget);
     const id = str(o.id);
@@ -103,7 +124,11 @@ export function parseFeedbackForm(root: unknown): FeedbackForm | undefined {
       else if (/anonymous/i.test(label)) anonymous = o.value;
     } else if (widget === 'radioGroupInput' && /sharing/i.test(label)) {
       walk(o.children, (c) => {
-        if (c.widget === 'checkBoxInput' && c.value === true && str(c.label)) shared = c.label as string;
+        const cid = str(c.id);
+        const kind = cid ? SHARING_KINDS.find(([re]) => re.test(cid))?.[1] : undefined;
+        if (c.widget === 'checkBoxInput' && cid && kind) {
+          sharing.push({ kind, id: cid, label: str(c.label) ?? kind, checked: c.value === true });
+        }
       });
     }
   });
@@ -111,7 +136,8 @@ export function parseFeedbackForm(root: unknown): FeedbackForm | undefined {
   const visibility: string[] = [];
   if (showName !== undefined) visibility.push(showName ? 'Your name is shown' : 'Your name is hidden');
   if (anonymous !== undefined) visibility.push(anonymous ? 'Anonymous' : 'Not anonymous');
-  if (shared) visibility.push(`Shared: ${shared}`);
+  const shared = sharing.find((o) => o.checked);
+  if (shared) visibility.push(`Shared: ${shared.label}`);
   return {
     pageId,
     bar,
@@ -120,6 +146,7 @@ export function parseFeedbackForm(root: unknown): FeedbackForm | undefined {
     ...(recipients ? { recipients } : {}),
     ...(template ? { template } : {}),
     ...(questionList ? { questionList } : {}),
+    ...(sharing.length ? { sharing } : {}),
     visibility,
   };
 }

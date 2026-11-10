@@ -131,11 +131,16 @@ reuses that live session — there is no separate login.
   `feedback` as plain text, optional `badge`). Confirm-gated: the first call
   fills Workday's form up to Submit and cancels it, returning a preview
   (recipient and badge as Workday resolved them, and the visibility it will
-  post with) plus a `confirmToken`. SHOW THE PREVIEW TO THE USER and only call
+  post with) plus a `confirmToken`. `sharing` picks who sees it:
+  `everyone` (Workday's "Share with others"), `private` (Workday's "Share
+  with …" one person — the recipient here, you on a request) or
+  `confidential` ("Don't share with" the person it is about). SHOW THE PREVIEW TO THE USER and only call
   again with the token once they approve.
 - **`workday_request_feedback`** — **a write.** Ask people (`from`) for
-  feedback on yourself, or on one of your reports (`about`), using a
-  `template` and/or your own `questions`. Same confirm gate; the preview lists
+  feedback on yourself, or on someone on your team or under you (`about` —
+  Workday's Get Feedback on Associate offers no peers or managers), using a
+  `template` and/or your own `questions`, and the same `sharing` choice —
+  `confidential` keeps the answers from the person they are about. Same confirm gate; the preview lists
   every question, including the template's. Each person asked gets an inbox
   task once it is submitted.
 - **`workday_get_request`** — your open requests ("Revise Request" tasks),

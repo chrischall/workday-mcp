@@ -68,6 +68,7 @@ import {
   questionFieldIds,
   summaryQuestions,
   type FeedbackForm,
+  type FeedbackSharing,
 } from './parse-feedback.js';
 import {
   changeSummaryXml,
@@ -481,6 +482,8 @@ export interface GiveFeedbackInput {
   feedback: string;
   /** A badge, by (part of) its name. */
   badge?: string;
+  /** Who sees it; omit to keep the form's default. */
+  sharing?: FeedbackSharing;
 }
 
 export interface GiveFeedbackPreview {
@@ -501,6 +504,8 @@ export interface RequestFeedbackInput {
   template?: string;
   /** Your own questions, plain text. */
   questions?: string[];
+  /** Who sees the answers; omit to keep the form's default. */
+  sharing?: FeedbackSharing;
 }
 
 export interface RequestFeedbackPreview {
@@ -1651,6 +1656,19 @@ export class WorkdayClient {
     }
   }
 
+  /**
+   * Select a sharing choice (`_eventId_validate=<checkbox>`, value `1` —
+   * `true` is refused) and return the visibility lines the form will now
+   * submit with. Workday clears the other two choices itself.
+   */
+  private async setFeedbackSharing(flowKey: string, form: FeedbackForm, sharing?: FeedbackSharing): Promise<string[]> {
+    if (!sharing) return form.visibility;
+    const opt = form.sharing?.find((o) => o.kind === sharing);
+    if (!opt) throw new Error('This feedback form has no sharing choice to set.');
+    await this.flowStep(flowKey, { _eventId_validate: opt.id, [opt.id]: '1' });
+    return [...form.visibility.filter((v) => !v.startsWith('Shared: ')), `Shared: ${opt.label}`];
+  }
+
   /** Press the form's Submit and commit. A page that comes back still
    *  carrying the Submit bar was sent back, not accepted. */
   private async submitFeedbackForm(flowKey: string, form: FeedbackForm): Promise<void> {
@@ -1685,6 +1703,7 @@ export class WorkdayClient {
       const f = parseFeedbackForm(redactTree(form, { maxDepth: TYPED_REDACT_MAX_DEPTH }));
       if (!f?.feedbackField) throw new Error('The Give Feedback form has no feedback field this server recognises.');
       const ids = [picked.instanceId];
+      const visibility = await this.setFeedbackSharing(flowKey, f, input.sharing);
       await this.flowStep(flowKey, { _eventId_validate: f.feedbackField, [f.feedbackField]: feedbackHtml(input.feedback) });
       let badge: string | undefined;
       if (input.badge) {
@@ -1700,7 +1719,7 @@ export class WorkdayClient {
         to: picked.text,
         feedback: input.feedback.trim(),
         ...(badge ? { badge } : {}),
-        visibility: f.visibility,
+        visibility,
       };
       const revision = createHash('sha256').update(JSON.stringify([preview, ids])).digest('hex');
       if (commitRevision !== undefined) {
@@ -1762,7 +1781,15 @@ export class WorkdayClient {
     let about = 'yourself';
     let subjectId: string | undefined;
     if (input.about) {
-      const opened = await this.openViaAssociatePrompt(GET_FEEDBACK_ON_ASSOCIATE_TASK, input.about);
+      const opened = await this.openViaAssociatePrompt(GET_FEEDBACK_ON_ASSOCIATE_TASK, input.about).catch((e: Error) => {
+        throw /^No ".*" option matching/.test(e.message)
+          ? new Error(
+              `Workday offers no one matching "${input.about}" to request feedback about. Get Feedback on ` +
+                'Associate only lists your team or the people under you in your management hierarchy — not ' +
+                'peers or managers.'
+            )
+          : e;
+      });
       ({ flowKey, form } = opened);
       about = opened.picked.text;
       subjectId = opened.picked.instanceId;
@@ -1778,6 +1805,7 @@ export class WorkdayClient {
         throw new Error('The Get Feedback form has no recipients or questions this server recognises.');
       }
       const ids: string[] = subjectId ? [subjectId] : [];
+      const visibility = await this.setFeedbackSharing(flowKey, f, input.sharing);
       const asked: string[] = [];
       for (const name of from) {
         const v = await this.addPromptValue(flowKey, f.recipients, name, true);
@@ -1806,7 +1834,7 @@ export class WorkdayClient {
         from: asked,
         ...(template ? { template } : {}),
         questions,
-        visibility: f.visibility,
+        visibility,
       };
       const revision = createHash('sha256').update(JSON.stringify([preview, ids])).digest('hex');
       if (commitRevision !== undefined) {

@@ -308,6 +308,12 @@ On the form (ids are per page load — find fields by label):
 - visibility ("Show my name?", "Make Feedback Anonymous", the "Feedback
   Sharing" radio's three checkboxes, expiration date) is `hideAdvice: ALWAYS`
   on this tenant: the form submits its defaults, so the preview states them.
+  Hidden or not, the sharing checkboxes are settable: `_eventId_validate=<id>`,
+  `<id>=1` (`true` gets an XML System_Error) → `changeSummary` that sets the
+  chosen one and clears the other two (and makes the template optional when
+  confidential). Get Feedback on Associate's prompt offers only My Team and
+  your manager / supervisory-org hierarchy — a peer, a skip-level or your own
+  manager returns no match.
 - commit: the same `bpfButtonBar` as a request — `_eventId_add=<barId>`,
   `<barId>=934$20` (Submit; `934$14` is Save for Later), `_DID`, `_IID`, then
   `_eventId_submit=<body.id>`. Cancel is `_eventId_cancel=Cancel`.

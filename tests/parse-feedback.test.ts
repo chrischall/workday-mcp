@@ -22,6 +22,14 @@ describe('parseFeedbackForm — Give Feedback', () => {
     expect(parseFeedbackForm(giveForm)?.visibility).toEqual(['Your name is shown', 'Shared: Share with others']);
   });
 
+  it('reads the three sharing choices, by kind, with Workday\'s own labels', () => {
+    expect(parseFeedbackForm(giveForm)?.sharing).toEqual([
+      { kind: 'confidential', id: '852/wd:Feedback_Confidential', label: "Don't share with Pat Doe", checked: false },
+      { kind: 'private', id: '852/wd:Feedback_Private', label: 'Share with Pat Doe', checked: false },
+      { kind: 'everyone', id: '852/wd:Show_Feedback_to_Everyone', label: 'Share with others', checked: true },
+    ]);
+  });
+
   it('never carries the session token', () => {
     expect(JSON.stringify(parseFeedbackForm(giveForm))).not.toContain('SECRET-TOKEN');
   });
