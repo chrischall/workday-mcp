@@ -425,9 +425,6 @@ const DEFAULT_CRAWL_DEPTH = 1;
 const DEFAULT_MAX_CARDS = 12;
 const DEFAULT_CRAWL_CONCURRENCY = 4;
 
-/** Strip a leading anti-CSRF/guard prefix (anything before the first `{`)
- *  from a Workday JSON body. Live tenants currently emit clean JSON, but
- *  classic Workday endpoints have historically guarded it. */
 /** One table of a report's output. */
 export interface WorkdayReportTable {
   label?: string;
@@ -464,6 +461,9 @@ export interface WorkdayDashboard {
   tabs: Array<{ label: string; worklets: WorkdayDashboardWorklet[]; links: DashboardLink[] }>;
 }
 
+/** Strip a leading anti-CSRF/guard prefix (anything before the first `{`)
+ *  from a Workday JSON body. Live tenants currently emit clean JSON, but
+ *  classic Workday endpoints have historically guarded it. */
 export function stripJsonGuard(body: string): string {
   const start = body.indexOf('{');
   return start > 0 ? body.slice(start) : body;
