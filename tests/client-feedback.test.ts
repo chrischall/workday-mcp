@@ -146,6 +146,20 @@ describe('WorkdayClient — give feedback', () => {
     );
   });
 
+  it('sets the sharing choice it is asked for and previews Workday\'s label for it', async () => {
+    const { client, transport } = makeClient(giveRoutes());
+    const plan = await client.planGiveFeedback({ to: 'Pat Doe', feedback: 'x', sharing: 'private' });
+    const set = posts(transport).find((p) => p.get('_eventId_validate') === '852/wd:Feedback_Private');
+    expect(set?.get('852/wd:Feedback_Private')).toBe('1');
+    expect(plan.preview.visibility).toEqual(['Your name is shown', 'Shared: Share with Pat Doe']);
+  });
+
+  it('leaves the sharing default alone when none is asked for', async () => {
+    const { client, transport } = makeClient(giveRoutes());
+    await client.planGiveFeedback({ to: 'Pat Doe', feedback: 'x' });
+    expect(posts(transport).some((p) => /Feedback_(Confidential|Private)|Show_Feedback/.test(p.get('_eventId_validate') ?? ''))).toBe(false);
+  });
+
   it('lists the people when the name is ambiguous', async () => {
     const { client } = makeClient(
       giveRoutes({
@@ -234,6 +248,24 @@ describe('WorkdayClient — request feedback', () => {
     const plan = await client.planRequestFeedback({ about: 'Pat Doe', from: ['Sam Roe'], questions: ['Q?'] });
     expect(plan.preview.about).toBe('Pat Doe');
     expect(events(transport).slice(0, 3)).toEqual(['_eventId_prompt=66', '_eventId_add=66', '_eventId_submit=72']);
+  });
+
+  it('keeps a request confidential: not shared with the person it is about', async () => {
+    const { client, transport } = makeClient(requestRoutes({ about: true }));
+    const plan = await client.planRequestFeedback({ about: 'Pat Doe', from: ['Sam Roe'], questions: ['Q?'], sharing: 'confidential' });
+    const set = posts(transport).find((p) => p.get('_eventId_validate') === '956/wd:Feedback_Confidential');
+    expect(set?.get('956/wd:Feedback_Confidential')).toBe('1');
+    expect(plan.preview.visibility).toContain("Shared: Don't share with Me Myself");
+  });
+
+  it('explains that Workday only offers your own hierarchy for `about`', async () => {
+    const routes = requestRoutes({ about: true });
+    (routes as Record<string, unknown>)['POST /acme/prompt/c0/66.htmld'] = { items: [] };
+    const { client, transport } = makeClient(routes);
+    await expect(client.planRequestFeedback({ about: 'My Boss', from: ['Sam Roe'], questions: ['Q?'] })).rejects.toThrow(
+      /your team or the people under you/
+    );
+    expect(events(transport).at(-1)).toBe('_eventId_cancel=Cancel');
   });
 
   it('applies with Submit and verifies against Feedback Requested', async () => {

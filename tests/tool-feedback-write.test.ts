@@ -87,6 +87,13 @@ describe.each([
     expect(JSON.stringify(res)).toContain('"verified":true');
   });
 
+  it('passes `sharing` through to the plan', async () => {
+    const { client, tools } = harness();
+    const planSpy = vi.spyOn(client, planFn).mockResolvedValue(makePlan() as never);
+    await tools.get(name)!.cb({ ...args, sharing: 'confidential' }, NO_ELICIT_CTX);
+    expect(planSpy.mock.calls[0]![0]).toMatchObject({ sharing: 'confidential' });
+  });
+
   it('refuses a token when Workday now resolves the form differently', async () => {
     const { client, tools } = harness();
     const planSpy = vi.spyOn(client, planFn).mockResolvedValue(makePlan('rev-1') as never);
