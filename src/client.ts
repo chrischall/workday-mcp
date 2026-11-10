@@ -678,6 +678,16 @@ function norm(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
 }
 
+/** Whether a Feedback Requested row's question is `asked` — Workday may
+ *  show it shortened, so compare the leading text. */
+function sameQuestion(shown: string, asked: string): boolean {
+  const a = norm(shown).toLowerCase();
+  const b = norm(asked).toLowerCase();
+  if (!a || !b) return false;
+  const n = Math.min(a.length, b.length, 60);
+  return n >= Math.min(20, b.length) && a.slice(0, n) === b.slice(0, n);
+}
+
 /** `label = a | b` for each prompt, for an error a caller can act on. */
 function describePrompts(prompts: ReportPrompt[]): string {
   return prompts.map((p) => `${p.label} = ${p.values.map((v) => v.text).join(' | ') || '(empty)'}`).join('; ');
@@ -1870,21 +1880,29 @@ export class WorkdayClient {
     plan: FeedbackPlan<RequestFeedbackInput, RequestFeedbackPreview>
   ): Promise<FeedbackResult<RequestFeedbackPreview>> {
     const { preview, subjectId } = await this.driveRequestFeedback(plan.input, plan.revision);
-    const missing: string[] = [];
-    let rows: string[] = [];
+    // Feedback Requested lists one row PER QUESTION and names no one asked
+    // (live columns: Status, Request Date, Question, "Feedback Request: …"),
+    // so the request is found by its questions on a row dated today.
+    let rows: Array<Record<string, string>> = [];
     try {
-      rows = await this.feedbackRows('requested', subjectId);
+      const who = subjectId ?? (await this.getOrgChart()).workerId;
+      if (who) rows = (await this.getFeedback(who, 'requested')).feedback;
     } catch {
       // Verification is best effort; the submit itself succeeded.
     }
-    for (const who of preview.from) if (!rows.some((r) => r.includes(who))) missing.push(who);
-    const verified = rows.length > 0 && missing.length === 0;
+    const recent = rows.filter((r) => {
+      const when = dateValue(r['Request Date']);
+      return Number.isNaN(when) || Math.abs(when - Date.now()) < 2 * 86_400_000;
+    });
+    const missing = preview.questions.filter((q) => !recent.some((r) => sameQuestion(r['Question'] ?? '', q)));
+    const verified = recent.length > 0 && missing.length === 0;
     return {
       ...preview,
       verified,
       verification: verified
-        ? `Re-read Feedback Requested: the request to ${preview.from.join(', ')} is there.`
-        : `Submitted, but could not find the request to ${missing.join(', ') || preview.from.join(', ')} in Feedback Requested yet — check it in Workday.`,
+        ? `Re-read Feedback Requested: all ${preview.questions.length} question(s) are there, requested today.`
+        : `Submitted, but could not find ${missing.length ? `"${norm(missing[0]!).slice(0, 60)}"` : 'the request'} ` +
+          'in Feedback Requested yet — check it in Workday before sending again.',
     };
   }
 

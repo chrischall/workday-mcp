@@ -272,7 +272,11 @@ describe('WorkdayClient — request feedback', () => {
     const { client, transport } = makeClient(requestRoutes());
     vi.spyOn(client, 'getFeedback').mockResolvedValue({
       matched: 'Feedback Requested',
-      feedback: [{ 'Requested From': 'Sam Roe', Question: 'Q?' }],
+      // The live grid: one row per QUESTION, with no column naming who was
+      // asked — so verification must match the questions, not the names.
+      feedback: [
+        { Status: 'In Progress', 'Request Date': '11/10/2026', Question: 'Q?', '102.1': 'Feedback Request: Me requested by Me' },
+      ],
     });
     const plan = await client.planRequestFeedback({ from: ['Sam Roe'], questions: ['Q?'] });
     transport.calls.length = 0;
@@ -280,6 +284,27 @@ describe('WorkdayClient — request feedback', () => {
     expect(events(transport).slice(-2)).toEqual(['_eventId_add=1035', '_eventId_submit=1051']);
     expect(r).toMatchObject({ action: 'request', verified: true });
     expect(client.getFeedback).toHaveBeenCalledWith('247$1', 'requested');
+  });
+
+  it('matches a long question even when Workday shows it shortened', async () => {
+    const long = 'Earlier this year, before I moved into my manager role, you were my manager. What went well?';
+    const { client } = makeClient(requestRoutes());
+    vi.spyOn(client, 'getFeedback').mockResolvedValue({
+      matched: 'Feedback Requested',
+      feedback: [{ Status: 'In Progress', Question: long.slice(0, 70) }],
+    });
+    const plan = await client.planRequestFeedback({ from: ['Sam Roe'], questions: [long] });
+    expect((await client.applyRequestFeedback(plan)).verified).toBe(true);
+  });
+
+  it('does not count an older request that asked the same question', async () => {
+    const { client } = makeClient(requestRoutes());
+    vi.spyOn(client, 'getFeedback').mockResolvedValue({
+      matched: 'Feedback Requested',
+      feedback: [{ Status: 'Completed', 'Request Date': '01/02/2020', Question: 'Q?' }],
+    });
+    const plan = await client.planRequestFeedback({ from: ['Sam Roe'], questions: ['Q?'] });
+    expect((await client.applyRequestFeedback(plan)).verified).toBe(false);
   });
 
   it('says it could not confirm when the re-read does not show the request', async () => {
