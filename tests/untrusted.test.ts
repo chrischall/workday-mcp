@@ -9,6 +9,7 @@ import { registerTaskTools } from '../src/tools/task.js';
 import { registerReviewTools } from '../src/tools/review.js';
 import { registerRequestTools } from '../src/tools/requests.js';
 import { registerBenefitTools } from '../src/tools/benefits.js';
+import { registerReportTools } from '../src/tools/reports.js';
 import { WD_UNTRUSTED_NOTE } from '../src/view.js';
 import type {
   BridgeProbeResult,
@@ -65,6 +66,8 @@ const UNTRUSTED_TOOLS = [
   'workday_get_request',
   'workday_get_benefits',
   'workday_get_benefit_enrollment',
+  'workday_run_report',
+  'workday_get_dashboard',
 ] as const;
 
 const TRUSTED_TOOLS = ['workday_get_apps', 'workday_get_org_chart', 'workday_get_team'] as const;
@@ -93,6 +96,8 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
     vi.spyOn(client, 'getInbox').mockResolvedValue({ total: 1, items: [{ title: INJECTION }] });
     vi.spyOn(client, 'getBenefits').mockResolvedValue({ matched: 'View Dependents', rows: [{ Dependent: INJECTION }] });
     vi.spyOn(client, 'getBenefitEnrollment').mockResolvedValue({ event: { title: INJECTION }, elected: [] });
+    vi.spyOn(client, 'runReport').mockResolvedValue({ report: 'R', tables: [{ columns: ['Name'], rows: [{ Name: INJECTION }] }] });
+    vi.spyOn(client, 'getDashboard').mockResolvedValue({ dashboard: 'D', tabs: [{ label: INJECTION, worklets: [], links: [] }] });
     vi.spyOn(client, 'getMyRequests').mockResolvedValue({ requests: [{ Request: INJECTION }] });
     vi.spyOn(client, 'getRequestForm').mockResolvedValue({
       requestType: 'Promotion',
@@ -106,6 +111,7 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
       registerReviewTools(server, client);
       registerRequestTools(server, client);
       registerBenefitTools(server, client);
+      registerReportTools(server, client);
     });
   });
 
@@ -147,6 +153,8 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
     ['workday_get_request', { request: '1$1' }],
     ['workday_get_benefits', {}],
     ['workday_get_benefit_enrollment', {}],
+    ['workday_run_report', { report: '1422$242' }],
+    ['workday_get_dashboard', { dashboard: 'year end' }],
   ];
 
   it.each(calls)('%s fences its result, markers before the content', async (name, args) => {

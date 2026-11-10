@@ -9,6 +9,7 @@ import { registerRawTools } from '../src/tools/raw.js';
 import { registerReviewTools } from '../src/tools/review.js';
 import { registerRequestTools } from '../src/tools/requests.js';
 import { registerBenefitTools } from '../src/tools/benefits.js';
+import { registerReportTools } from '../src/tools/reports.js';
 import type { BridgeProbeResult, BridgeStatus, FetchInit, FetchResult, WorkdayTransport } from '../src/transport.js';
 
 /**
@@ -80,6 +81,7 @@ async function setup(inbox: (init: FetchInit) => unknown = () => ({ total: 0, da
     registerReviewTools(s, client);
     registerRequestTools(s, client);
     registerBenefitTools(s, client);
+    registerReportTools(s, client);
   });
   close = () => h.close();
   const tools = (await h.client.listTools()).tools as Listed[];
@@ -93,7 +95,7 @@ async function setup(inbox: (init: FetchInit) => unknown = () => ({ total: 0, da
 describe('_meta.mint hints', () => {
   it('every tool except the healthcheck carries domain "work" and a valid intent in the contract shape', async () => {
     const { tools } = await setup();
-    expect(tools.length).toBe(22);
+    expect(tools.length).toBe(24);
     for (const t of tools) {
       if (t.name.endsWith('_healthcheck')) continue;
       const m = t._meta?.mint;

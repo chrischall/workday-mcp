@@ -637,16 +637,22 @@ function parseGrid(grid: Obj): WorkdayGrid {
   // A `columnGroup` is a header spanning several columns, not a column: its
   // own `columns` carry the ids the cells are keyed by (live "View Feedback
   // Received" nests Feedback and Badge this way).
-  const addColumns = (list: unknown, depth: number): void => {
+  // A wide report repeats leaf labels across groups ("Status" on its own and
+  // under "Effective Job Requisition"); keying both by the bare label would
+  // let one overwrite the other, so a repeat is prefixed with its group.
+  const used = new Set<string>();
+  const addColumns = (list: unknown, depth: number, group?: string): void => {
     if (!Array.isArray(list) || depth > 5) return;
     for (const col of list) {
       if (!isObj(col)) continue;
       if (Array.isArray(col.columns)) {
-        addColumns(col.columns, depth + 1);
+        addColumns(col.columns, depth + 1, str(col.label) ?? group);
         continue;
       }
       const id = str(col.columnId);
-      const label = str(col.label) ?? id ?? '';
+      let label = str(col.label) ?? id ?? '';
+      if (used.has(label) && group) label = `${group}: ${label}`;
+      used.add(label);
       if (id) idToLabel.set(id, label);
       columns.push(label);
     }

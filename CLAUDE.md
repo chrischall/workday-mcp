@@ -39,7 +39,7 @@ every request rides the user's signed-in `*.myworkday.com` tab.
   NOT the envelope token), `getMyRequests`, `getTeamSnapshot`, the request
   reads/writes (`listOpenRequests`/`getRequest`/`planRequestUpdate`/
   `applyRequestUpdate`), and a
-  query-only `graphql`. **`getRequestForm` is the one non-GET read**: Workday
+  query-only `graphql`. **`getRequestForm` is a non-GET read** (`runReport` is the other): Workday
   only renders a request's form inside the Create Request flow, so it drives
   that flow with form-urlencoded `postForm` steps and ALWAYS cancels it.
   `_eventId_submit` there is the PROMPT page's OK — the same event on a loaded
@@ -54,6 +54,13 @@ every request rides the user's signed-in `*.myworkday.com` tab.
   (Save for Later, Review and Sign, Confirm and Continue) that change
   elections. `getBenefits` / `getBenefitEnrollment` in `client.ts` are
   GET-only; `tools/benefits.ts` registers them.
+- `src/parse-reports.ts` — report prompt forms (prompts + current values,
+  validation errors by prompt) and dashboards (tabs, worklets → `workletIid`,
+  GET menu links). `runReport` in `client.ts` is the second non-GET read: it
+  drives a prompt report's own flow (remove/search/add, then the prompt's OK)
+  and ALWAYS cancels; like `getRequestForm` it refuses any page carrying a
+  `bpfButtonBar`. `tools/reports.ts` registers `workday_run_report` and
+  `workday_get_dashboard`.
 - `src/transport-fetchproxy.ts` — wraps `@chrischall/mcp-utils/fetchproxy`;
   `splitHost` maps `wd5.myworkday.com` → domain `myworkday.com` + subdomain `wd5`.
 - `src/tools/*.ts` — `registerXxxTools(server, client)` → `server.registerTool`.

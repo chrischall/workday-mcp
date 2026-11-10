@@ -154,6 +154,14 @@
     {
       "name": "workday_update_benefit_enrollment",
       "description": "Write. Choose or waive plans and set HSA/FSA amounts in an open enrollment, then Save for Later or sign and Submit — confirmation-gated, verified by re-read"
+    },
+    {
+      "name": "workday_run_report",
+      "description": "Run a Workday report by task id, URL or dashboard name, setting its prompts, and return its rows"
+    },
+    {
+      "name": "workday_get_dashboard",
+      "description": "Open a dashboard (e.g. Year End Dashboard): its worklets and report links, optionally running each worklet"
     }
   ]
 }

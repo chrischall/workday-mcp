@@ -40,6 +40,7 @@ import {
   parseRequestModel,
   parseWizardSections,
   hasSubmitBar,
+  stripHtml,
   type WorkdayTask,
   type WorkdayApp,
   type WorkdayReference,
@@ -52,6 +53,15 @@ import {
   type WorkdayProfileSection,
 } from './parse.js';
 import { isSecretKey, redactTree } from './redact.js';
+import {
+  parseDashboardTab,
+  parseDashboardTabs,
+  parseReportErrors,
+  parseReportPrompts,
+  type DashboardLink,
+  type DashboardWorklet,
+  type ReportPrompt,
+} from './parse-reports.js';
 import {
   changeSummaryXml,
   electionsFromGrid,
@@ -418,6 +428,42 @@ const DEFAULT_CRAWL_CONCURRENCY = 4;
 /** Strip a leading anti-CSRF/guard prefix (anything before the first `{`)
  *  from a Workday JSON body. Live tenants currently emit clean JSON, but
  *  classic Workday endpoints have historically guarded it. */
+/** One table of a report's output. */
+export interface WorkdayReportTable {
+  label?: string;
+  /** Columns that carry data in at least one returned row, in report order. */
+  columns: string[];
+  /** Rows keyed by column label. */
+  rows: Array<Record<string, string>>;
+  /** Present when Workday holds more rows than were returned. */
+  incomplete?: { shown: number; total: number };
+}
+
+export interface WorkdayReportResult {
+  report: string;
+  reportId?: string;
+  /** The prompt values the report ran with (prompt reports only). */
+  prompts?: Array<{ label: string; values: string[] }>;
+  tables: WorkdayReportTable[];
+}
+
+export interface RunReportOptions {
+  /** Prompt label (or a distinctive part of it) → the value(s) to set. */
+  prompts?: Record<string, string | string[]>;
+  /** Most rows to return per table (default 500). */
+  limit?: number;
+}
+
+export type WorkdayDashboardWorklet = DashboardWorklet & {
+  tables?: WorkdayReportTable[];
+  error?: string;
+};
+
+export interface WorkdayDashboard {
+  dashboard: string;
+  tabs: Array<{ label: string; worklets: WorkdayDashboardWorklet[]; links: DashboardLink[] }>;
+}
+
 export function stripJsonGuard(body: string): string {
   const start = body.indexOf('{');
   return start > 0 ? body.slice(start) : body;
@@ -558,6 +604,11 @@ function pickByLabel<T>(items: T[], label: (t: T) => string, wanted: string, wha
       ? `"${wanted}" matches more than one ${what}: ${names.join(' | ')}. Use a longer part of the name.`
       : `No ${what} matching "${wanted}". Available: ${names.join(' | ') || '(none)'}.`
   );
+}
+
+/** `label = a | b` for each prompt, for an error a caller can act on. */
+function describePrompts(prompts: ReportPrompt[]): string {
+  return prompts.map((p) => `${p.label} = ${p.values.map((v) => v.text).join(' | ') || '(empty)'}`).join('; ');
 }
 
 /** The instance id in an inbox task uri (`/{t}/inst/<id>/rel-task/...`). */
@@ -720,6 +771,11 @@ export class WorkdayClient {
       this.rememberSessionToken(json);
       return json;
     } catch (e) {
+      // Workday answers a task it will not run (a report scoped to an event
+      // that is not open, say) with a 200 XML `wml:System_Error`. Its message
+      // is the useful part.
+      const systemError = /<wml:System_Error[\s\S]*?<wml:Message>([\s\S]*?)<\/wml:Message>/.exec(result.body)?.[1];
+      if (systemError) throw new Error(`Workday refused ${path}: ${stripHtml(systemError).trim()}`);
       // A 200 that isn't JSON is almost always the SPA shell HTML or an SSO
       // page — point the user at the data-endpoint vs SPA-route distinction.
       throw new Error(
@@ -1344,6 +1400,210 @@ export class WorkdayClient {
       people,
       ...(total > people.length ? { incomplete: { shown: people.length, total } } : {}),
     };
+  }
+
+  /**
+   * Run a Workday report and return its rows.
+   *
+   * `report` is a task id (`1422$242`), the report's address-bar URL, or a
+   * name found among your dashboards' worklets and report links. A report
+   * that answers its GET with a table is returned as is. A report behind a
+   * PROMPT form is run the way the web app runs it: on the page's own flow,
+   * each requested prompt is cleared, searched and set, then the prompt's OK
+   * is pressed — and the flow is always cancelled afterwards.
+   *
+   * The prompt's OK is safe only on a report: a page carrying a
+   * `bpfButtonBar` is a business-process form, where the same event would
+   * submit it, so such a page is refused before anything is sent, and a
+   * "result" that turns out to be one is cancelled and refused.
+   */
+  async runReport(report: string, opts: RunReportOptions = {}): Promise<WorkdayReportResult> {
+    const limit = opts.limit ?? 500;
+    const asked = Object.entries(opts.prompts ?? {});
+    const reportId = await this.resolveReport(report);
+    const page = (await this.fetchJson(`/${this.tenant}/task/${reportId}.htmld`)) as Record<string, unknown>;
+    const form = parseReportPrompts(page);
+    if (!form) {
+      if (asked.length) {
+        throw new Error(`This report takes no prompts; it ran without them. Drop \`prompts\` and retry.`);
+      }
+      return { ...this.reportTables(page, limit), reportId };
+    }
+    if (hasSubmitBar(page) || !form.flowKey) {
+      if (form.flowKey) await this.cancelFlow(form.flowKey);
+      throw new Error(
+        'This task is not a report: it opens a business-process form, which this tool never submits. ' +
+          'Open it in Workday instead.'
+      );
+    }
+    const flowKey = form.flowKey;
+    try {
+      for (const [label, wanted] of asked) {
+        const prompt = pickByLabel(form.prompts, (p) => p.label, label, 'prompt on this report');
+        await this.setListPrompt(flowKey, prompt, Array.isArray(wanted) ? wanted : [wanted]);
+      }
+      const result = (await this.postForm(`/${this.tenant}/flowController.htmld`, {
+        _flowExecutionKey: flowKey,
+        _eventId_submit: form.okId,
+      })) as Record<string, unknown>;
+      const errors = parseReportErrors(result, form.prompts);
+      if (errors.length) {
+        throw new Error(
+          `Workday did not run the report: ${errors.join(' ')} Prompts were: ${describePrompts(form.prompts)}. ` +
+            'Pass `prompts` to change them.'
+        );
+      }
+      if (hasSubmitBar(result)) {
+        throw new Error(
+          'This task is not a report: its prompt opened a business-process form, which this tool never ' +
+            'submits. It was cancelled.'
+        );
+      }
+      const prompts = form.prompts
+        .filter((p) => p.values.length)
+        .map((p) => ({ label: p.label, values: p.values.map((v) => v.text) }));
+      return { ...this.reportTables(result, limit), reportId, prompts };
+    } finally {
+      await this.cancelFlow(flowKey);
+    }
+  }
+
+  /** Replace a list prompt's values: remove each current one, then search
+   *  for and add each wanted one. Updates `prompt.values` to match. */
+  private async setListPrompt(flowKey: string, prompt: ReportPrompt, wanted: string[]): Promise<void> {
+    if (prompt.widget !== 'monikerListInput' || !prompt.contextId) {
+      throw new Error(
+        `The "${prompt.label}" prompt is a ${prompt.widget}; only list prompts can be set here. ` +
+          'Run the report without it or set it in Workday.'
+      );
+    }
+    const url = `/${this.tenant}/flowController.htmld`;
+    for (const v of prompt.values) {
+      if (!v.instanceId) continue;
+      await this.postForm(url, { _flowExecutionKey: flowKey, _eventId_remove: prompt.id, [prompt.id]: v.instanceId });
+    }
+    prompt.values = [];
+    for (const value of wanted) {
+      const found = (await this.postForm(`/${this.tenant}/prompt/${prompt.contextId}/${prompt.id}.htmld`, {
+        _flowExecutionKey: flowKey,
+        _eventId_prompt: prompt.id,
+        q: value,
+      })) as { items?: Array<{ instanceId?: string; text?: string }> };
+      const items = (found.items ?? []).filter(
+        (i): i is { instanceId: string; text: string } => !!i.instanceId && !!i.text
+      );
+      if (!items.length) {
+        throw new Error(
+          `No "${prompt.label}" option matching "${value}" that you can pick. Use a distinctive part of ` +
+            'the name as Workday shows it in that prompt.'
+        );
+      }
+      const pick = pickByLabel(items, (i) => i.text, value, `"${prompt.label}" option`);
+      const iid = pick.instanceId;
+      await this.postForm(url, {
+        _flowExecutionKey: flowKey,
+        _eventId_add: prompt.id,
+        [prompt.id]: iid,
+        [`${iid}_DID`]: pick.text,
+        [`${iid}_IID`]: iid,
+        [`${iid}_PV`]: '1',
+        [`${iid}_V`]: '1',
+      });
+      prompt.values.push({ text: pick.text, instanceId: iid });
+    }
+  }
+
+  /** A report page's grids as label-keyed tables, secrets and PII redacted. */
+  private reportTables(page: unknown, limit: number): { report: string; tables: WorkdayReportTable[] } {
+    const task = parseTask(redactTree(page, { maxDepth: TYPED_REDACT_MAX_DEPTH }));
+    const tables = task.grids.map((g): WorkdayReportTable => {
+      const all = g.rows.map((r) => r.cells);
+      const rows = all.slice(0, Math.max(0, limit));
+      const filled = new Set(rows.flatMap((r) => Object.keys(r)));
+      const total = Math.max(g.totalRowCount ?? 0, all.length);
+      return {
+        ...(g.label ? { label: g.label } : {}),
+        columns: g.columns.filter((c) => filled.has(c)),
+        rows,
+        ...(total > rows.length ? { incomplete: { shown: rows.length, total } } : {}),
+      };
+    });
+    return { report: task.title ?? 'Report', tables };
+  }
+
+  /** A report reference → its task id: an id, a task url, or a name found on
+   *  your dashboards. */
+  private async resolveReport(report: string): Promise<string> {
+    const r = report.trim();
+    if (/^\d+\$[A-Za-z0-9_-]+$/.test(r)) return r;
+    const fromPath = /\/task\/(\d+\$[A-Za-z0-9_-]+)/.exec(r)?.[1];
+    if (fromPath) return fromPath;
+    const known: Array<{ label: string; reportId: string }> = [];
+    for (const app of await this.dashboardApps()) {
+      try {
+        const d = await this.getDashboard(app.taskId as string);
+        for (const tab of d.tabs) known.push(...tab.worklets, ...tab.links);
+      } catch {
+        // A dashboard you cannot open has no reports to offer.
+      }
+    }
+    try {
+      return pickByLabel(known, (k) => k.label, r, 'report on your dashboards').reportId;
+    } catch (e) {
+      throw new Error(
+        `${(e as Error).message} Workday's search is not open to this server, so a report that is not on ` +
+          'one of your dashboards needs its task id: open it in Workday and pass the address bar URL ' +
+          '(…/d/task/1422$242.htmld) or just the id (1422$242).'
+      );
+    }
+  }
+
+  /** Your app-menu entries that are dashboards. */
+  private async dashboardApps(): Promise<WorkdayApp[]> {
+    return (await this.getApps()).filter((a) => a.taskId && /dashboard/i.test(a.label) && a.label !== 'Dashboards');
+  }
+
+  /**
+   * A dashboard: each tab's worklets (the report each shows) and its report
+   * links. `dashboard` is a dashboard app's name (by label from your app
+   * menu), a task id, or its address-bar URL. With `run`, every worklet's
+   * report is run as well; one that fails keeps its error instead of failing
+   * the whole dashboard.
+   */
+  async getDashboard(dashboard: string, opts: { run?: boolean; limit?: number } = {}): Promise<WorkdayDashboard> {
+    const d = dashboard.trim();
+    let taskId = /^\d+\$[A-Za-z0-9_-]+$/.test(d) ? d : /\/task\/(\d+\$[A-Za-z0-9_-]+)/.exec(d)?.[1];
+    if (!taskId) {
+      const apps = await this.dashboardApps();
+      taskId = pickByLabel(apps, (a) => a.label, d, 'dashboard in your app menu').taskId as string;
+    }
+    const page = await this.getRedacted(`/${this.tenant}/task/${taskId}.htmld`);
+    const title = parseTask(page).title ?? d;
+    const tabRefs = parseDashboardTabs(page);
+    const tabs: WorkdayDashboard['tabs'] = [];
+    const pages = tabRefs.length
+      ? await Promise.all(
+          tabRefs.map(async (t) => ({ label: t.label, page: await this.getRedacted(`/${this.tenant}/task/${t.taskId}.htmld`) }))
+        )
+      : [{ label: title, page }];
+    for (const { label, page: tabPage } of pages) {
+      const { worklets, links } = parseDashboardTab(tabPage);
+      const out: WorkdayDashboardWorklet[] = [];
+      for (const w of worklets) {
+        if (!opts.run) {
+          out.push(w);
+          continue;
+        }
+        try {
+          const r = await this.runReport(w.reportId, { limit: opts.limit ?? 100 });
+          out.push({ ...w, tables: r.tables });
+        } catch (e) {
+          out.push({ ...w, error: (e as Error).message });
+        }
+      }
+      tabs.push({ label, worklets: out, links });
+    }
+    return { dashboard: title, tabs };
   }
 
   /**
