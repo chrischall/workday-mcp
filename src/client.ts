@@ -63,6 +63,13 @@ import {
   type ReportPrompt,
 } from './parse-reports.js';
 import {
+  feedbackHtml,
+  parseFeedbackForm,
+  questionFieldIds,
+  summaryQuestions,
+  type FeedbackForm,
+} from './parse-feedback.js';
+import {
   changeSummaryXml,
   electionsFromGrid,
   hasWidget,
@@ -254,6 +261,12 @@ const CREATE_REQUEST_TASK = '2997$12683';
 /** Workday's delivered "My Requests" report — a GET-able grid of the
  *  requests you created, with status. Delivered, like Create Request. */
 const MY_REQUESTS_TASK = '3005$4617';
+// Workday's delivered feedback tasks (same ids on every tenant, like the two
+// above). Give Feedback and Get Feedback on Associate open with an associate
+// prompt; Get Feedback on Self opens straight on its form.
+const GIVE_FEEDBACK_TASK = '2997$3067';
+const GET_FEEDBACK_ON_SELF_TASK = '2997$3241';
+const GET_FEEDBACK_ON_ASSOCIATE_TASK = '2997$2976';
 
 export type BenefitsView = 'elections' | 'dependents' | 'beneficiaries' | 'history';
 
@@ -461,6 +474,55 @@ export interface WorkdayDashboard {
   tabs: Array<{ label: string; worklets: WorkdayDashboardWorklet[]; links: DashboardLink[] }>;
 }
 
+export interface GiveFeedbackInput {
+  /** The colleague, by name as Workday's people prompt finds them. */
+  to: string;
+  /** Plain text; paragraphs separated by a blank line. */
+  feedback: string;
+  /** A badge, by (part of) its name. */
+  badge?: string;
+}
+
+export interface GiveFeedbackPreview {
+  action: 'give';
+  to: string;
+  feedback: string;
+  badge?: string;
+  /** The visibility Workday submits with (its hidden defaults). */
+  visibility: string[];
+}
+
+export interface RequestFeedbackInput {
+  /** Who to ask, by name. */
+  from: string[];
+  /** One of your reports to ask about; omit to ask about yourself. */
+  about?: string;
+  /** A feedback template, by (part of) its name. */
+  template?: string;
+  /** Your own questions, plain text. */
+  questions?: string[];
+}
+
+export interface RequestFeedbackPreview {
+  action: 'request';
+  /** `yourself`, or the report the feedback is about. */
+  about: string;
+  from: string[];
+  template?: string;
+  /** Every question the request will carry: the template's, then yours. */
+  questions: string[];
+  visibility: string[];
+}
+
+export interface FeedbackPlan<I, P> {
+  input: I;
+  preview: P;
+  /** Hash of the preview and every instance it resolved to. */
+  revision: string;
+}
+
+export type FeedbackResult<P> = P & { verified: boolean; verification: string };
+
 /** Strip a leading anti-CSRF/guard prefix (anything before the first `{`)
  *  from a Workday JSON body. Live tenants currently emit clean JSON, but
  *  classic Workday endpoints have historically guarded it. */
@@ -604,6 +666,11 @@ function pickByLabel<T>(items: T[], label: (t: T) => string, wanted: string, wha
       ? `"${wanted}" matches more than one ${what}: ${names.join(' | ')}. Use a longer part of the name.`
       : `No ${what} matching "${wanted}". Available: ${names.join(' | ') || '(none)'}.`
   );
+}
+
+/** Whitespace-collapsed, for matching text across Workday's renderings. */
+function norm(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
 }
 
 /** `label = a | b` for each prompt, for an error a caller can act on. */
@@ -1489,32 +1556,324 @@ export class WorkdayClient {
     }
     prompt.values = [];
     for (const value of wanted) {
-      const found = (await this.postForm(`/${this.tenant}/prompt/${prompt.contextId}/${prompt.id}.htmld`, {
-        _flowExecutionKey: flowKey,
-        _eventId_prompt: prompt.id,
-        q: value,
-      })) as { items?: Array<{ instanceId?: string; text?: string }> };
-      const items = (found.items ?? []).filter(
-        (i): i is { instanceId: string; text: string } => !!i.instanceId && !!i.text
+      const pick = await this.addPromptValue(flowKey, { id: prompt.id, label: prompt.label, contextId: prompt.contextId }, value);
+      prompt.values.push({ text: pick.text, instanceId: pick.instanceId });
+    }
+  }
+
+  /**
+   * Search a list prompt on an open flow for `value`, pick the match by label
+   * and add it. With `strict`, the add must come back as a change summary
+   * (form fields do; a task's opening prompt answers with less), which is
+   * returned — a template choice carries the questions it put on the form.
+   */
+  private async addPromptValue(
+    flowKey: string,
+    prompt: { id: string; label: string; contextId: string },
+    value: string,
+    strict = false
+  ): Promise<{ text: string; instanceId: string; summary?: Record<string, unknown> }> {
+    const found = (await this.postForm(`/${this.tenant}/prompt/${prompt.contextId}/${prompt.id}.htmld`, {
+      _flowExecutionKey: flowKey,
+      _eventId_prompt: prompt.id,
+      q: value,
+    })) as { items?: Array<{ instanceId?: string; text?: string }> };
+    const items = (found.items ?? []).filter(
+      (i): i is { instanceId: string; text: string } => !!i.instanceId && !!i.text
+    );
+    if (!items.length) {
+      throw new Error(
+        `No "${prompt.label}" option matching "${value}" that you can pick. Use a distinctive part of ` +
+          'the name as Workday shows it in that prompt.'
       );
-      if (!items.length) {
-        throw new Error(
-          `No "${prompt.label}" option matching "${value}" that you can pick. Use a distinctive part of ` +
-            'the name as Workday shows it in that prompt.'
-        );
-      }
-      const pick = pickByLabel(items, (i) => i.text, value, `"${prompt.label}" option`);
-      const iid = pick.instanceId;
-      await this.postForm(url, {
+    }
+    const pick = pickByLabel(items, (i) => i.text, value, `"${prompt.label}" option`);
+    const iid = pick.instanceId;
+    const add = {
+      _eventId_add: prompt.id,
+      [prompt.id]: iid,
+      [`${iid}_DID`]: pick.text,
+      [`${iid}_IID`]: iid,
+      [`${iid}_PV`]: '1',
+      [`${iid}_V`]: '1',
+    };
+    if (strict) return { text: pick.text, instanceId: iid, summary: await this.flowStep(flowKey, add) };
+    await this.postForm(`/${this.tenant}/flowController.htmld`, { _flowExecutionKey: flowKey, ...add });
+    return { text: pick.text, instanceId: iid };
+  }
+
+  /** One step on an open form that Workday must acknowledge with a change
+   *  summary; anything else (a validation error, the page re-rendered) stops
+   *  the caller before it can reach Submit. */
+  private async flowStep(flowKey: string, params: Record<string, string>): Promise<Record<string, unknown>> {
+    const res = await this.postForm(`/${this.tenant}/flowController.htmld`, { _flowExecutionKey: flowKey, ...params });
+    if (res && typeof res === 'object' && (res as { widget?: unknown }).widget === 'changeSummary') {
+      return res as Record<string, unknown>;
+    }
+    const errors = parseReportErrors(redactTree(res, { maxDepth: TYPED_REDACT_MAX_DEPTH }), []);
+    throw new Error(
+      `Workday did not accept a change${errors.length ? `: ${errors.join(' ')}` : ''}. Nothing was sent.`
+    );
+  }
+
+  /**
+   * Open a task that starts with an associate prompt (Give Feedback, Get
+   * Feedback on Associate): pick `who`, press the PROMPT's OK, and return the
+   * form it opens on the same flow. The prompt's OK is pressed only on a page
+   * without a Submit bar; the flow is cancelled on any failure here.
+   */
+  private async openViaAssociatePrompt(
+    taskId: string,
+    who: string
+  ): Promise<{ flowKey: string; form: Record<string, unknown>; picked: { text: string; instanceId: string } }> {
+    const page = (await this.fetchJson(`/${this.tenant}/task/${taskId}.htmld`)) as Record<string, unknown>;
+    const flowKey = typeof page.flowExecutionKey === 'string' ? page.flowExecutionKey : undefined;
+    const prompts = parseReportPrompts(redactTree(page, { maxDepth: TYPED_REDACT_MAX_DEPTH }));
+    const prompt = prompts?.prompts.find((p) => p.widget === 'monikerListInput' && p.contextId);
+    if (!flowKey || !prompts || !prompt?.contextId || hasSubmitBar(page)) {
+      if (flowKey) await this.cancelFlow(flowKey);
+      throw new Error('Workday did not open this task with its associate prompt, so it was left alone.');
+    }
+    try {
+      const picked = await this.addPromptValue(flowKey, { id: prompt.id, label: prompt.label, contextId: prompt.contextId }, who);
+      const form = (await this.postForm(`/${this.tenant}/flowController.htmld`, {
         _flowExecutionKey: flowKey,
-        _eventId_add: prompt.id,
-        [prompt.id]: iid,
-        [`${iid}_DID`]: pick.text,
-        [`${iid}_IID`]: iid,
-        [`${iid}_PV`]: '1',
-        [`${iid}_V`]: '1',
-      });
-      prompt.values.push({ text: pick.text, instanceId: iid });
+        _eventId_submit: prompts.okId,
+      })) as Record<string, unknown>;
+      if (!hasSubmitBar(form)) {
+        const errors = parseReportErrors(redactTree(form, { maxDepth: TYPED_REDACT_MAX_DEPTH }), prompts.prompts);
+        throw new Error(`Workday did not open the form for ${picked.text}${errors.length ? `: ${errors.join(' ')}` : '.'}`);
+      }
+      return { flowKey, form, picked };
+    } catch (e) {
+      await this.cancelFlow(flowKey);
+      throw e;
+    }
+  }
+
+  /** Press the form's Submit and commit. A page that comes back still
+   *  carrying the Submit bar was sent back, not accepted. */
+  private async submitFeedbackForm(flowKey: string, form: FeedbackForm): Promise<void> {
+    const { id, submit } = form.bar;
+    await this.flowStep(flowKey, { _eventId_add: id, [id]: submit, [`${submit}_DID`]: 'Submit', [`${submit}_IID`]: submit });
+    const done = await this.postForm(`/${this.tenant}/flowController.htmld`, {
+      _flowExecutionKey: flowKey,
+      _eventId_submit: form.pageId,
+    });
+    if (hasSubmitBar(done)) {
+      const errors = parseReportErrors(redactTree(done, { maxDepth: TYPED_REDACT_MAX_DEPTH }), []);
+      throw new Error(
+        `Workday sent the form back instead of accepting it${errors.length ? `: ${errors.join(' ')}` : ''}. ` +
+          'Nothing was submitted.'
+      );
+    }
+  }
+
+  /**
+   * Fill the Give Feedback form (recipient, text, badge) and either cancel it
+   * (`commitRevision` absent — the plan) or, when the freshly-resolved form
+   * still hashes to `commitRevision`, press Submit.
+   */
+  private async driveGiveFeedback(
+    input: GiveFeedbackInput,
+    commitRevision?: string
+  ): Promise<{ preview: GiveFeedbackPreview; revision: string }> {
+    if (!input.feedback.trim()) throw new Error('Feedback text is empty.');
+    const { flowKey, form, picked } = await this.openViaAssociatePrompt(GIVE_FEEDBACK_TASK, input.to);
+    let committed = false;
+    try {
+      const f = parseFeedbackForm(redactTree(form, { maxDepth: TYPED_REDACT_MAX_DEPTH }));
+      if (!f?.feedbackField) throw new Error('The Give Feedback form has no feedback field this server recognises.');
+      const ids = [picked.instanceId];
+      await this.flowStep(flowKey, { _eventId_validate: f.feedbackField, [f.feedbackField]: feedbackHtml(input.feedback) });
+      let badge: string | undefined;
+      if (input.badge) {
+        if (!f.badge) throw new Error('This Give Feedback form offers no badge.');
+        const opt = pickByLabel(f.badge.options, (o) => o.text, input.badge, 'badge');
+        const iid = opt.instanceId;
+        await this.flowStep(flowKey, { _eventId_add: f.badge.id, [f.badge.id]: iid, [`${iid}_DID`]: opt.text, [`${iid}_IID`]: iid });
+        badge = opt.text;
+        ids.push(iid);
+      }
+      const preview: GiveFeedbackPreview = {
+        action: 'give',
+        to: picked.text,
+        feedback: input.feedback.trim(),
+        ...(badge ? { badge } : {}),
+        visibility: f.visibility,
+      };
+      const revision = createHash('sha256').update(JSON.stringify([preview, ids])).digest('hex');
+      if (commitRevision !== undefined) {
+        if (revision !== commitRevision) {
+          throw new Error('The feedback form changed since the preview (recipient or badge resolved differently). Nothing was sent; preview again.');
+        }
+        await this.submitFeedbackForm(flowKey, f);
+        committed = true;
+      }
+      return { preview, revision };
+    } finally {
+      if (!committed) await this.cancelFlow(flowKey);
+    }
+  }
+
+  /** Preview giving feedback: drives the form up to Submit and cancels it,
+   *  so the recipient and badge are resolved by Workday itself. Sends nothing. */
+  async planGiveFeedback(input: GiveFeedbackInput): Promise<FeedbackPlan<GiveFeedbackInput, GiveFeedbackPreview>> {
+    return { input, ...(await this.driveGiveFeedback(input)) };
+  }
+
+  /**
+   * Give the feedback a plan previewed, on a fresh flow, refusing if anything
+   * resolves differently from the preview; then re-read your Feedback Given.
+   *
+   * Callers MUST gate this behind `confirmWrite` with the plan's preview and
+   * revision — see `workday_give_feedback`.
+   */
+  async applyGiveFeedback(
+    plan: FeedbackPlan<GiveFeedbackInput, GiveFeedbackPreview>
+  ): Promise<FeedbackResult<GiveFeedbackPreview>> {
+    const { preview } = await this.driveGiveFeedback(plan.input, plan.revision);
+    const snippet = norm(preview.feedback).slice(0, 40);
+    const check = await this.feedbackReread('given', undefined, (row) => row.includes(preview.to) && row.includes(snippet));
+    return {
+      ...preview,
+      verified: check,
+      verification: check
+        ? `Re-read your Feedback Given: the feedback to ${preview.to} is there.`
+        : `Submitted, but could not find it in your Feedback Given yet — check your profile in Workday.`,
+    };
+  }
+
+  /**
+   * Fill a Get Feedback form — on yourself, or `about` one of your reports —
+   * with the people to ask, a template and/or your own questions, then cancel
+   * it or (revision unchanged) submit it.
+   */
+  private async driveRequestFeedback(
+    input: RequestFeedbackInput,
+    commitRevision?: string
+  ): Promise<{ preview: RequestFeedbackPreview; revision: string; subjectId?: string }> {
+    const from = input.from.map((n) => n.trim()).filter(Boolean);
+    const custom = (input.questions ?? []).map((q) => q.trim()).filter(Boolean);
+    if (!from.length) throw new Error('Say who to ask: `from` needs at least one name.');
+    if (!input.template && !custom.length) throw new Error('Pass at least one question or a template.');
+    let flowKey: string;
+    let form: Record<string, unknown>;
+    let about = 'yourself';
+    let subjectId: string | undefined;
+    if (input.about) {
+      const opened = await this.openViaAssociatePrompt(GET_FEEDBACK_ON_ASSOCIATE_TASK, input.about);
+      ({ flowKey, form } = opened);
+      about = opened.picked.text;
+      subjectId = opened.picked.instanceId;
+    } else {
+      form = (await this.fetchJson(`/${this.tenant}/task/${GET_FEEDBACK_ON_SELF_TASK}.htmld`)) as Record<string, unknown>;
+      if (typeof form.flowExecutionKey !== 'string') throw new Error('Workday did not open Get Feedback on Self.');
+      flowKey = form.flowExecutionKey;
+    }
+    let committed = false;
+    try {
+      const f = parseFeedbackForm(redactTree(form, { maxDepth: TYPED_REDACT_MAX_DEPTH }));
+      if (!f?.recipients || !f.questionList) {
+        throw new Error('The Get Feedback form has no recipients or questions this server recognises.');
+      }
+      const ids: string[] = subjectId ? [subjectId] : [];
+      const asked: string[] = [];
+      for (const name of from) {
+        const v = await this.addPromptValue(flowKey, f.recipients, name, true);
+        asked.push(v.text);
+        ids.push(v.instanceId);
+      }
+      const questions: string[] = [];
+      let template: string | undefined;
+      if (input.template) {
+        if (!f.template) throw new Error('This Get Feedback form offers no feedback templates.');
+        const v = await this.addPromptValue(flowKey, f.template, input.template, true);
+        template = v.text;
+        ids.push(v.instanceId);
+        questions.push(...summaryQuestions(v.summary));
+      }
+      for (const q of custom) {
+        const row = await this.flowStep(flowKey, { _eventId_add: f.questionList });
+        const fieldId = questionFieldIds(row)[0];
+        if (!fieldId) throw new Error('Workday added a question row this server cannot read. Nothing was sent.');
+        await this.flowStep(flowKey, { _eventId_validate: fieldId, [fieldId]: feedbackHtml(q) });
+        questions.push(q);
+      }
+      const preview: RequestFeedbackPreview = {
+        action: 'request',
+        about,
+        from: asked,
+        ...(template ? { template } : {}),
+        questions,
+        visibility: f.visibility,
+      };
+      const revision = createHash('sha256').update(JSON.stringify([preview, ids])).digest('hex');
+      if (commitRevision !== undefined) {
+        if (revision !== commitRevision) {
+          throw new Error('The feedback request changed since the preview (people, template or its questions resolved differently). Nothing was sent; preview again.');
+        }
+        await this.submitFeedbackForm(flowKey, f);
+        committed = true;
+      }
+      return { preview, revision, ...(subjectId ? { subjectId } : {}) };
+    } finally {
+      if (!committed) await this.cancelFlow(flowKey);
+    }
+  }
+
+  /** Preview a feedback request: drives the form up to Submit and cancels
+   *  it. Sends nothing. */
+  async planRequestFeedback(
+    input: RequestFeedbackInput
+  ): Promise<FeedbackPlan<RequestFeedbackInput, RequestFeedbackPreview>> {
+    const { preview, revision } = await this.driveRequestFeedback(input);
+    return { input, preview, revision };
+  }
+
+  /**
+   * Send the feedback request a plan previewed, on a fresh flow, refusing if
+   * anything resolves differently; then re-read Feedback Requested.
+   *
+   * Callers MUST gate this behind `confirmWrite` with the plan's preview and
+   * revision — see `workday_request_feedback`.
+   */
+  async applyRequestFeedback(
+    plan: FeedbackPlan<RequestFeedbackInput, RequestFeedbackPreview>
+  ): Promise<FeedbackResult<RequestFeedbackPreview>> {
+    const { preview, subjectId } = await this.driveRequestFeedback(plan.input, plan.revision);
+    const missing: string[] = [];
+    let rows: string[] = [];
+    try {
+      rows = await this.feedbackRows('requested', subjectId);
+    } catch {
+      // Verification is best effort; the submit itself succeeded.
+    }
+    for (const who of preview.from) if (!rows.some((r) => r.includes(who))) missing.push(who);
+    const verified = rows.length > 0 && missing.length === 0;
+    return {
+      ...preview,
+      verified,
+      verification: verified
+        ? `Re-read Feedback Requested: the request to ${preview.from.join(', ')} is there.`
+        : `Submitted, but could not find the request to ${missing.join(', ') || preview.from.join(', ')} in Feedback Requested yet — check it in Workday.`,
+    };
+  }
+
+  /** One feedback grid (yours, or a report's) as one string per row. */
+  private async feedbackRows(kind: FeedbackKind, worker?: string): Promise<string[]> {
+    const who = worker ?? (await this.getOrgChart()).workerId;
+    if (!who) return [];
+    const { feedback } = await this.getFeedback(who, kind);
+    return feedback.map((r) => norm(Object.values(r).join(' | ')));
+  }
+
+  /** Best-effort re-read: does some row of your `kind` feedback match? */
+  private async feedbackReread(kind: FeedbackKind, worker: string | undefined, match: (row: string) => boolean): Promise<boolean> {
+    try {
+      return (await this.feedbackRows(kind, worker)).some(match);
+    } catch {
+      return false;
     }
   }
 

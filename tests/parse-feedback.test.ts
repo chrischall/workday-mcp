@@ -1,0 +1,73 @@
+import { describe, it, expect } from 'vitest';
+import { feedbackHtml, parseFeedbackForm, questionFieldIds, summaryQuestions } from '../src/parse-feedback.js';
+import { giveForm, questionRowAdded, requestForm, templateChosen } from './feedback-fixtures.js';
+
+describe('parseFeedbackForm — Give Feedback', () => {
+  it('reads the commit ids, the feedback field and the badge options', () => {
+    const f = parseFeedbackForm(giveForm);
+    expect(f?.pageId).toBe('944');
+    expect(f?.bar).toEqual({ id: '931', submit: '934$20' });
+    expect(f?.feedbackField).toBe('852/wd:Response_Comment');
+    expect(f?.badge).toEqual({
+      id: '850',
+      options: [
+        { text: 'I act decisively and get things done', instanceId: '16411$3' },
+        { text: 'I own it', instanceId: '16411$2' },
+        { text: 'I think like a customer', instanceId: '16411$6' },
+      ],
+    });
+  });
+
+  it('reports the hidden visibility defaults the form will submit with', () => {
+    expect(parseFeedbackForm(giveForm)?.visibility).toEqual(['Your name is shown', 'Shared: Share with others']);
+  });
+
+  it('never carries the session token', () => {
+    expect(JSON.stringify(parseFeedbackForm(giveForm))).not.toContain('SECRET-TOKEN');
+  });
+
+  it('is undefined for a page without a Submit bar', () => {
+    expect(parseFeedbackForm({ widget: 'root', body: { widget: 'vbox', id: '1', children: [] } })).toBeUndefined();
+  });
+});
+
+describe('parseFeedbackForm — Get Feedback', () => {
+  it('reads the recipients prompt, the template prompt and the question list', () => {
+    const f = parseFeedbackForm(requestForm);
+    expect(f?.pageId).toBe('1051');
+    expect(f?.bar).toEqual({ id: '1035', submit: '934$20' });
+    expect(f?.recipients).toMatchObject({ id: '948', contextId: 'c3' });
+    expect(f?.template).toMatchObject({ id: '949', contextId: 'c3' });
+    expect(f?.questionList).toBe('956.217');
+    expect(f?.visibility).toEqual(['Not anonymous', 'Shared: Share with others']);
+  });
+
+  it('ignores hidden prompts (skills) when finding the template', () => {
+    expect(parseFeedbackForm(requestForm)?.template?.label).toBe('Feedback Template');
+  });
+});
+
+describe('changeSummary readers', () => {
+  it('finds the new question field a row-add created', () => {
+    expect(questionFieldIds(questionRowAdded('1354'))).toEqual(['1354/wd:Feedback_Question']);
+  });
+
+  it('reads a template\'s questions as plain text', () => {
+    expect(summaryQuestions(templateChosen)).toEqual([
+      'Please provide me feedback on what I can do differently?',
+      'What did I do well?',
+    ]);
+  });
+});
+
+describe('feedbackHtml', () => {
+  it('escapes markup and makes each paragraph a <p>', () => {
+    expect(feedbackHtml('Great work on <the> migration & rollout.\n\nThank you!')).toBe(
+      '<p>Great work on &lt;the&gt; migration &amp; rollout.</p><p>Thank you!</p>'
+    );
+  });
+
+  it('keeps single line breaks inside a paragraph', () => {
+    expect(feedbackHtml('one\ntwo')).toBe('<p>one<br>two</p>');
+  });
+});

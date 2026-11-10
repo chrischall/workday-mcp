@@ -162,6 +162,14 @@
     {
       "name": "workday_get_dashboard",
       "description": "Open a dashboard (e.g. Year End Dashboard): its worklets and report links, optionally running each worklet"
+    },
+    {
+      "name": "workday_give_feedback",
+      "description": "Write. Give a colleague feedback, optionally with a badge — confirmation-gated, verified by re-read"
+    },
+    {
+      "name": "workday_request_feedback",
+      "description": "Write. Ask colleagues for feedback on yourself or one of your reports, with a template and/or your own questions — confirmation-gated"
     }
   ]
 }
