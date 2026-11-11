@@ -63,7 +63,8 @@ yourself, or check a release zip against the `.sha256` file published beside it
 | `workday_get_my_profile` | The same catalog, for yourself |
 | `workday_get_team` | The people on the teams you manage — each with worker id, position, location and profile link |
 | `workday_get_reviews` | A worker's performance reviews (period, rating), or one review in full: manager and employee ratings and comments, goals, development items |
-| `workday_get_feedback` | Feedback a worker received, gave, or requested — author, date, badge and full text |
+| `workday_get_feedback_status` | Every feedback request you made, on yourself or your team — who has answered, who is still to, and the answers |
+| `workday_get_feedback` | Feedback you or a team member received, gave, or requested — grouped by item, every answer with its author; requests show who has answered and who is still to |
 | `workday_get_inbox` | Your inbox ("My Tasks"): review comments to provide, feedback requests, questionnaires, approvals — each with a `uri` to open read-only. `category: "archive"` for completed items. Also takes `view: "brief"` (additive to `compact`/`full`): one line per task, `<title> — <ISO date | no date> — <status>`, in the untrusted-data envelope, with `-- ` note lines (`-- none`, `-- N of M shown`) |
 | `workday_get_my_requests` | The requests you created (e.g. promotion consideration forms) with their status |
 | `workday_get_team_snapshot` | One table of everyone in your organization — grade, job profile, last promotion, rating, pay — from the My Team hub's associates report |
@@ -101,7 +102,8 @@ workday_open_app           { app: "talent" }            → a whole app hub, cra
 workday_get_team                                        → your reports, with workerIds
 workday_get_reviews        { worker: "247$42" }         → their review history
 workday_get_reviews        { worker: "247$42", review: "latest" }   → ratings + comments
-workday_get_feedback       { worker: "247$42" }         → feedback received
+workday_get_feedback       { worker: "Justin K" }       → feedback received
+workday_get_feedback_status                             → all your open requests: who answered, who hasn't
 workday_get_request_form   { requestType: "promotion consideration" } → the form's questions
 workday_get_inbox                                       → review steps and requests waiting on you
 workday_get_my_requests                                 → status of what you submitted

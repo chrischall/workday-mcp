@@ -67,6 +67,7 @@ describe('tool registration', () => {
       'workday_get_team',
       'workday_get_reviews',
       'workday_get_feedback',
+      'workday_get_feedback_status',
       'workday_get_request_form',
       'workday_get_team_snapshot',
       'workday_get_inbox',

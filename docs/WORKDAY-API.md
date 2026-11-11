@@ -188,7 +188,21 @@ All plain GETs unless noted, and every hop is matched by LABEL:
   repeating goals and beliefs. Empty numerics arrive as `0`.
 - **Feedback.** Profile → "View Feedback Received" is a grid whose Feedback and
   Badge columns sit inside a **`columnGroup`** — its own `columns` carry the
-  ids the cells are keyed by. Feedback text is `compactRichTextArea` HTML.
+  ids the cells are keyed by. Feedback text is `compactRichTextArea` HTML
+  — seen live (91 values, 20 pages, 2026-11-11): `<p>` (once with
+  `style="text-align:left"`), `<br />`, `<ul><li>` (sometimes `<li><p>`), `<b>`,
+  bare `<span>`, entities `&#39;` `&#34;` `&#x2019;`, and a trailing U+200B.
+  Paragraph breaks are written as `<p></p>`, `<br /><br />` or `</p><br /><p>`.
+  All three feedback grids send an item as one FULL row followed by
+  **continuation rows carrying only the group's columns** (one per further
+  answer / responder); `parseGrid` marks them `continuation` and fills them in
+  from the row above. On "Feedback Requested" each item is a QUESTION; the
+  group (`wd:Feedback_Response_from_Request_View`) holds From — a `fieldSet`
+  wrapping the responder's person `monikerList` beside a photo — Feedback and
+  the visibility checkbox, and lists everyone asked, answered or not. The
+  request column has no label (propertyName `wd:Feedback_Requested--IS`, text
+  "Feedback Request: <about> requested by <requester>"); two same-day
+  requests share that text, so its moniker `instanceId` is the request key.
 - **Request forms (e.g. a promotion consideration form).** A Workday *Request*
   questionnaire. The questionnaire object itself is security-gated
   (`/inst/3$34469/<iid>` returns a `System_Error` without the coordinator

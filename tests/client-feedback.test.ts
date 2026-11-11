@@ -100,11 +100,9 @@ describe('WorkdayClient — give feedback', () => {
 
   it('applies on a fresh flow: same steps, then Submit and the commit, no cancel', async () => {
     const { client, transport } = makeClient(giveRoutes());
-    vi.spyOn(client, 'getFeedback').mockResolvedValue({
-      matched: 'Feedback Given',
+    vi.spyOn(client, 'getFeedbackRows').mockResolvedValue(
       // The live Feedback Given columns: Date, About, Feedback, Type, …
-      feedback: [{ Date: new Date().toLocaleDateString('en-US'), About: 'Pat Doe', Feedback: 'Great <work>.' }],
-    });
+      [{ Date: new Date().toLocaleDateString('en-US'), About: 'Pat Doe', Feedback: 'Great <work>.' }]);
     const plan = await client.planGiveFeedback({ to: 'Pat Doe', feedback: 'Great <work>.' });
     transport.calls.length = 0;
     const r = await client.applyGiveFeedback(plan);
@@ -118,15 +116,12 @@ describe('WorkdayClient — give feedback', () => {
     ]);
     expect(posts(transport)[4]!.get('931')).toBe('934$20');
     expect(r).toMatchObject({ action: 'give', to: 'Pat Doe', verified: true });
-    expect(client.getFeedback).toHaveBeenCalledWith('247$1', 'given');
+    expect(client.getFeedbackRows).toHaveBeenCalledWith(undefined, 'given');
   });
 
   it('does not count older feedback with the same words as this one', async () => {
     const { client } = makeClient(giveRoutes());
-    vi.spyOn(client, 'getFeedback').mockResolvedValue({
-      matched: 'Feedback Given',
-      feedback: [{ Date: '01/02/2020', About: 'Pat Doe', Feedback: 'Great <work>.' }],
-    });
+    vi.spyOn(client, 'getFeedbackRows').mockResolvedValue([{ Date: '01/02/2020', About: 'Pat Doe', Feedback: 'Great <work>.' }]);
     const plan = await client.planGiveFeedback({ to: 'Pat Doe', feedback: 'Great <work>.' });
     const r = await client.applyGiveFeedback(plan);
     expect(r.verified).toBe(false);
@@ -290,46 +285,38 @@ describe('WorkdayClient — request feedback', () => {
 
   it('applies with Submit and verifies against Feedback Requested', async () => {
     const { client, transport } = makeClient(requestRoutes());
-    vi.spyOn(client, 'getFeedback').mockResolvedValue({
-      matched: 'Feedback Requested',
+    vi.spyOn(client, 'getFeedbackRows').mockResolvedValue(
       // The live grid: one row per QUESTION, with no column naming who was
       // asked — so verification must match the questions, not the names.
-      feedback: [
-        { Status: 'In Progress', 'Request Date': '11/10/2026', Question: 'Q?', '102.1': 'Feedback Request: Me requested by Me' },
-      ],
-    });
+      [
+        { Status: 'In Progress', 'Request Date': '11/10/2026', Question: 'Q?', 'Feedback Requested': 'Feedback Request: Me requested by Me' },
+      ]);
     const plan = await client.planRequestFeedback({ from: ['Sam Roe'], questions: ['Q?'] });
     transport.calls.length = 0;
     const r = await client.applyRequestFeedback(plan);
     expect(events(transport).slice(-2)).toEqual(['_eventId_add=1035', '_eventId_submit=1051']);
     expect(r).toMatchObject({ action: 'request', verified: true });
-    expect(client.getFeedback).toHaveBeenCalledWith('247$1', 'requested');
+    expect(client.getFeedbackRows).toHaveBeenCalledWith(undefined, 'requested');
   });
 
   it('matches a long question even when Workday shows it shortened', async () => {
     const long = 'Earlier this year, before I moved into my manager role, you were my manager. What went well?';
     const { client } = makeClient(requestRoutes());
-    vi.spyOn(client, 'getFeedback').mockResolvedValue({
-      matched: 'Feedback Requested',
-      feedback: [{ Status: 'In Progress', Question: long.slice(0, 70) }],
-    });
+    vi.spyOn(client, 'getFeedbackRows').mockResolvedValue([{ Status: 'In Progress', Question: long.slice(0, 70) }]);
     const plan = await client.planRequestFeedback({ from: ['Sam Roe'], questions: [long] });
     expect((await client.applyRequestFeedback(plan)).verified).toBe(true);
   });
 
   it('does not count an older request that asked the same question', async () => {
     const { client } = makeClient(requestRoutes());
-    vi.spyOn(client, 'getFeedback').mockResolvedValue({
-      matched: 'Feedback Requested',
-      feedback: [{ Status: 'Completed', 'Request Date': '01/02/2020', Question: 'Q?' }],
-    });
+    vi.spyOn(client, 'getFeedbackRows').mockResolvedValue([{ Status: 'Completed', 'Request Date': '01/02/2020', Question: 'Q?' }]);
     const plan = await client.planRequestFeedback({ from: ['Sam Roe'], questions: ['Q?'] });
     expect((await client.applyRequestFeedback(plan)).verified).toBe(false);
   });
 
   it('says it could not confirm when the re-read does not show the request', async () => {
     const { client } = makeClient(requestRoutes());
-    vi.spyOn(client, 'getFeedback').mockResolvedValue({ matched: 'Feedback Requested', feedback: [] });
+    vi.spyOn(client, 'getFeedbackRows').mockResolvedValue([]);
     const plan = await client.planRequestFeedback({ from: ['Sam Roe'], questions: ['Q?'] });
     const r = await client.applyRequestFeedback(plan);
     expect(r.verified).toBe(false);

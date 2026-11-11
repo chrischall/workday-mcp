@@ -250,7 +250,8 @@ export interface WorkdayReview {
   sections: WorkdayReviewSection[];
 }
 
-export type FeedbackKind = 'received' | 'given' | 'requested';
+export type { FeedbackKind } from './feedback-view.js';
+import { groupFeedback, type FeedbackKind, type FeedbackItem, type FeedbackRequestStatus } from './feedback-view.js';
 
 /** The profile task each feedback kind lives under. */
 const FEEDBACK_TASKS: Record<FeedbackKind, string> = {
@@ -782,6 +783,8 @@ export class WorkdayClient {
   private sessionSecureToken: string | undefined;
   /** Learned-once worker-profile uri prefix for this tenant. */
   private profilePrefix: string | undefined;
+  /** The signed-in user's name, as every page's envelope states it. */
+  private signedInName: string | undefined;
 
   constructor(opts: WorkdayClientOptions) {
     this.transport = opts.transport;
@@ -949,7 +952,9 @@ export class WorkdayClient {
   async getTask(path: string): Promise<WorkdayTask> {
     const resolved = this.resolvePath(path);
     const json = await this.fetchJson(resolved);
-    return parseTask(redactTree(json, { maxDepth: TYPED_REDACT_MAX_DEPTH }));
+    const task = parseTask(redactTree(json, { maxDepth: TYPED_REDACT_MAX_DEPTH }));
+    if (task.user?.label) this.signedInName = task.user.label;
+    return task;
   }
 
   /** List the user's Workday apps (label + launchable task id). */
@@ -1321,20 +1326,123 @@ export class WorkdayClient {
     };
   }
 
-  /** Feedback a worker received, gave, or requested, one row per item. */
+  /**
+   * Feedback a worker received, gave, or requested, grouped the way Workday
+   * shows it: one entry per item with every answer (and its author) under it;
+   * for `requested`, one entry per request with who was asked, who has
+   * answered and who is still to. `worker` may be omitted or `me` for
+   * yourself, or a name from your team.
+   */
   async getFeedback(
-    worker: string,
+    worker?: string,
     kind: FeedbackKind = 'received'
-  ): Promise<{ matched: string; feedback: Array<Record<string, string>>; incomplete?: { shown: number; total: number } }> {
-    const page = await this.getWorkerTask(worker, FEEDBACK_TASKS[kind]);
-    const rows = page.task.grids.flatMap((g) => g.rows.map((r) => r.cells));
-    const shown = page.task.grids.reduce((n, g) => n + g.rows.length, 0);
-    const total = page.task.grids.reduce((n, g) => n + (g.totalRowCount ?? g.rows.length), 0);
+  ): Promise<{
+    matched: string;
+    worker: string;
+    feedback: FeedbackItem[] | FeedbackRequestStatus[];
+    incomplete?: { shown: number; total: number };
+  }> {
+    const { matched, grids, worker: who } = await this.feedbackGrids(worker, kind);
+    const shown = grids.reduce((n, g) => n + g.rows.length, 0);
+    const total = grids.reduce((n, g) => n + (g.totalRowCount ?? g.rows.length), 0);
     return {
-      matched: page.matched,
-      feedback: rows,
+      matched,
+      worker: who,
+      feedback: groupFeedback(kind, grids),
       ...(total > shown ? { incomplete: { shown, total } } : {}),
     };
+  }
+
+  /**
+   * Every feedback request YOU made that is still open, or that closed within
+   * `days` — on yourself and on each person on your team (Workday files a
+   * request on the profile of the person it is about) — with who has answered
+   * and who is still to. Newest first. A profile that cannot be read is named
+   * in `unread` rather than failing the rest.
+   */
+  async getFeedbackStatus(opts: { days?: number } = {}): Promise<{
+    requestedBy?: string;
+    requests: FeedbackRequestStatus[];
+    unread?: Array<{ worker: string; error: string }>;
+  }> {
+    const days = opts.days ?? 30;
+    const me = await this.resolveWorker();
+    let team: Array<{ id: string; name: string }> = [];
+    try {
+      team = (await this.getTeam()).organizations
+        .flatMap((o) => o.members)
+        .filter((m): m is typeof m & { workerId: string } => !!m.workerId && m.workerId !== me.id)
+        .map((m) => ({ id: m.workerId, name: m.name }));
+    } catch {
+      // Not a manager: your own requests are all there is.
+    }
+    const people = [{ id: me.id, name: me.name ?? 'you' }, ...team];
+    const unread: Array<{ worker: string; error: string }> = [];
+    const pages = await mapWithConcurrency(people, 3, async (p) => {
+      try {
+        return (await this.getFeedback(p.id, 'requested')).feedback as FeedbackRequestStatus[];
+      } catch (e) {
+        unread.push({ worker: p.name, error: (e as Error).message });
+        return [];
+      }
+    });
+    // Your own Feedback Requested page has been read by now, so its
+    // envelope has named you even when the org chart did not.
+    const requester = me.name ?? this.signedInName;
+    const since = Date.now() - days * 86_400_000;
+    const requests = pages
+      .flat()
+      .filter((r) => !requester || r.requestedBy === requester)
+      .filter((r) => !/^completed$/i.test(String(r.Status ?? '')) || dateValue(String(r['Request Date'] ?? '')) >= since)
+      .sort((a, b) => (dateValue(String(b['Request Date'] ?? '')) || 0) - (dateValue(String(a['Request Date'] ?? '')) || 0));
+    return { ...(requester ? { requestedBy: requester } : {}), requests, ...(unread.length ? { unread } : {}) };
+  }
+
+  /** The same grids as flat rows, each continuation filled in — what the
+   *  write verifications match against. */
+  async getFeedbackRows(worker: string | undefined, kind: FeedbackKind): Promise<Array<Record<string, string>>> {
+    const { grids } = await this.feedbackGrids(worker, kind);
+    return grids.flatMap((g) => g.rows.map((r) => r.cells));
+  }
+
+  private async feedbackGrids(
+    worker: string | undefined,
+    kind: FeedbackKind
+  ): Promise<{ matched: string; worker: string; grids: WorkdayGrid[] }> {
+    const who = await this.resolveWorker(worker);
+    const page = await this.getWorkerTask(who.id, FEEDBACK_TASKS[kind]);
+    return { matched: page.matched, worker: who.name ?? who.id, grids: page.task.grids };
+  }
+
+  /**
+   * A worker as the caller named them: omitted or `me` → you; a worker id or
+   * profile uri → as given; anything else → a person on your team, matched by
+   * name ("Justin K" finds "Justin Kolodny").
+   */
+  async resolveWorker(worker?: string): Promise<{ id: string; name?: string }> {
+    const w = (worker ?? '').trim();
+    if (!w || /^(me|myself|self|i)$/i.test(w)) {
+      const org = await this.getOrgChart();
+      if (!org.workerId) {
+        throw new Error('The org chart did not identify your worker id. Pass your profile URL instead.');
+      }
+      // The org chart names you only when it lists your reports; any page
+      // read so far names you in its envelope.
+      const name =
+        [...org.nodes, ...org.ancestors].find((n) => n.instanceId === org.workerId)?.name ?? this.signedInName;
+      return { id: org.workerId, ...(name ? { name } : {}) };
+    }
+    if (/^\d+\$\d+$/.test(w) || w.startsWith('/') || w.includes('.htmld')) return { id: w };
+    const members = (await this.getTeam()).organizations
+      .flatMap((o) => o.members)
+      .filter((m): m is typeof m & { workerId: string } => !!m.workerId);
+    const parts = w.split(/\s+/);
+    const byWords = members.filter((m) => wordsStartWith(m.name, parts));
+    const pick =
+      byWords.length === 1
+        ? byWords[0]!
+        : pickByLabel(byWords.length ? byWords : members, (m) => m.name, w, 'person on your team');
+    return { id: pick.workerId, name: pick.name };
   }
 
   /**
@@ -2036,9 +2144,7 @@ export class WorkdayClient {
     dateColumn: string
   ): Promise<Array<Record<string, string>>> {
     try {
-      const who = worker ?? (await this.getOrgChart()).workerId;
-      if (!who) return [];
-      return (await this.getFeedback(who, kind)).feedback.filter((r) => {
+      return (await this.getFeedbackRows(worker, kind)).filter((r) => {
         const when = dateValue(r[dateColumn]);
         return Number.isNaN(when) || Math.abs(when - Date.now()) < 2 * 86_400_000;
       });

@@ -82,8 +82,11 @@ export function registerReviewTools(server: McpServer, client: WorkdayClient): v
     {
       title: "Read a worker's feedback",
       description: untrustedDescription(
-        "Read the feedback a worker has received (default), given, or requested — each item's " +
-          'date, author, badge, type and full text. Read-only.'
+        "Read the feedback a worker has received (default), given, or requested. Received/given: one " +
+          'entry per item (date, author or subject, type, visibility) with its `answers` — each ' +
+          'question and the text. Requested: one entry per request, with who was `asked`, ' +
+          '`answeredBy` and `waitingOn`, and every question with its answers and their authors. To check ' +
+          'on requests you made about your team, read each person\'s `requested`. Read-only.'
       ),
       _meta: workMeta('lookup', { aliases: ['feedback', 'kudos'] }),
       annotations: {
@@ -97,7 +100,11 @@ export function registerReviewTools(server: McpServer, client: WorkdayClient): v
         worker: z
           .string()
           .min(1)
-          .describe('A `workerId` from `workday_get_team` (e.g. `247$42`) or a profile uri.'),
+          .optional()
+          .describe(
+            'Whose feedback: omit (or `me`) for your own; a name from your team (e.g. `Justin K`); or a ' +
+              '`workerId` from `workday_get_team` (e.g. `247$42`) or a profile uri.'
+          ),
         kind: z
           .enum(['received', 'given', 'requested'])
           .optional()
@@ -105,6 +112,38 @@ export function registerReviewTools(server: McpServer, client: WorkdayClient): v
       }),
     },
     async ({ worker, kind, view }) => viewResponse(view, await client.getFeedback(worker, kind))
+  );
+
+  server.registerTool(
+    'workday_get_feedback_status',
+    {
+      title: 'Check on your feedback requests',
+      description: untrustedDescription(
+        'Every feedback request you made that is still open, or closed in the last `days` (default 30) — ' +
+          'on yourself and on each person on your team — newest first. Each shows who it is `about`, ' +
+          'who was `asked`, `answeredBy` and `waitingOn`, and every question with its answers and their ' +
+          'authors. One call for "any updates on my feedback requests?". Reads one profile per person, ' +
+          'so expect up to a minute on a team of ten. Read-only.'
+      ),
+      _meta: workMeta('lookup', { aliases: ['feedback status', 'feedback requests', 'who has answered'] }),
+      annotations: {
+        title: 'Check on your feedback requests',
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+      inputSchema: z.object({
+        view: viewArg(),
+        days: z
+          .number()
+          .int()
+          .min(1)
+          .max(3650)
+          .optional()
+          .describe('Also show requests that COMPLETED within this many days (default 30). Open ones always show.'),
+      }),
+    },
+    async ({ days, view }) => viewResponse(view, await client.getFeedbackStatus(days ? { days } : {}))
   );
 
   server.registerTool(

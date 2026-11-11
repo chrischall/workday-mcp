@@ -97,7 +97,7 @@ async function setup(inbox: (init: FetchInit) => unknown = () => ({ total: 0, da
 describe('_meta.mint hints', () => {
   it('every tool except the healthcheck carries domain "work" and a valid intent in the contract shape', async () => {
     const { tools } = await setup();
-    expect(tools.length).toBe(26);
+    expect(tools.length).toBe(27);
     for (const t of tools) {
       if (t.name.endsWith('_healthcheck')) continue;
       const m = t._meta?.mint;
