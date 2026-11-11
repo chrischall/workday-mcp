@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.0](https://github.com/chrischall/workday-mcp/compare/v1.7.0...v1.8.0) (2026-11-11)
+
+
+### Features
+
+* **feedback:** read and write Workday rich text as Markdown ([#208](https://github.com/chrischall/workday-mcp/issues/208)) ([714c103](https://github.com/chrischall/workday-mcp/commit/714c103ee20fb0ec849b236b005bcf1a66964f71))
+* **feedback:** show who answered each feedback request, in one call ([#205](https://github.com/chrischall/workday-mcp/issues/205)) ([691366c](https://github.com/chrischall/workday-mcp/commit/691366c338991b10cae403b93a22316cb8598dda))
+
 ## [1.7.0](https://github.com/chrischall/workday-mcp/compare/v1.6.0...v1.7.0) (2026-11-11)
 
 
