@@ -211,10 +211,6 @@ export function questionFieldIds(summary: unknown): string[] {
   return addedQuestionFields(summary).map((o) => o.id as string);
 }
 
-/** The questions a change put on the form (a template's), as plain text. */
-export function summaryQuestions(summary: unknown): string[] {
-  return summaryQuestionFields(summary).map((q) => q.text);
-}
 
 const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 

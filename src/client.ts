@@ -1768,7 +1768,11 @@ export class WorkdayClient {
   ): Promise<FeedbackResult<GiveFeedbackPreview>> {
     const { preview } = await this.driveGiveFeedback(plan.input, plan.revision);
     const snippet = norm(preview.feedback).slice(0, 40);
-    const check = await this.feedbackReread('given', undefined, (row) => row.includes(preview.to) && row.includes(snippet));
+    const rows = await this.recentFeedback('given', undefined, 'Date');
+    const check = rows.some((r) => {
+      const row = norm(Object.values(r).join(' | '));
+      return row.includes(preview.to) && row.includes(snippet);
+    });
     return {
       ...preview,
       verified: check,
@@ -1935,17 +1939,7 @@ export class WorkdayClient {
     // Feedback Requested lists one row PER QUESTION and names no one asked
     // (live columns: Status, Request Date, Question, "Feedback Request: …"),
     // so the request is found by its questions on a row dated today.
-    let rows: Array<Record<string, string>> = [];
-    try {
-      const who = subjectId ?? (await this.getOrgChart()).workerId;
-      if (who) rows = (await this.getFeedback(who, 'requested')).feedback;
-    } catch {
-      // Verification is best effort; the submit itself succeeded.
-    }
-    const recent = rows.filter((r) => {
-      const when = dateValue(r['Request Date']);
-      return Number.isNaN(when) || Math.abs(when - Date.now()) < 2 * 86_400_000;
-    });
+    const recent = await this.recentFeedback('requested', subjectId, 'Request Date');
     const missing = preview.questions.filter((q) => !recent.some((r) => sameQuestion(r['Question'] ?? '', q)));
     const verified = recent.length > 0 && missing.length === 0;
     return {
@@ -1958,20 +1952,26 @@ export class WorkdayClient {
     };
   }
 
-  /** One feedback grid (yours, or a report's) as one string per row. */
-  private async feedbackRows(kind: FeedbackKind, worker?: string): Promise<string[]> {
-    const who = worker ?? (await this.getOrgChart()).workerId;
-    if (!who) return [];
-    const { feedback } = await this.getFeedback(who, kind);
-    return feedback.map((r) => norm(Object.values(r).join(' | ')));
-  }
-
-  /** Best-effort re-read: does some row of your `kind` feedback match? */
-  private async feedbackReread(kind: FeedbackKind, worker: string | undefined, match: (row: string) => boolean): Promise<boolean> {
+  /**
+   * Re-read one feedback grid — yours, or `worker`'s — keeping only rows
+   * dated within two days (time zones), so an older entry with the same
+   * words cannot pass for the one just sent. Best effort: a failed re-read
+   * yields no rows, and the caller reports it as unverified.
+   */
+  private async recentFeedback(
+    kind: FeedbackKind,
+    worker: string | undefined,
+    dateColumn: string
+  ): Promise<Array<Record<string, string>>> {
     try {
-      return (await this.feedbackRows(kind, worker)).some(match);
+      const who = worker ?? (await this.getOrgChart()).workerId;
+      if (!who) return [];
+      return (await this.getFeedback(who, kind)).feedback.filter((r) => {
+        const when = dateValue(r[dateColumn]);
+        return Number.isNaN(when) || Math.abs(when - Date.now()) < 2 * 86_400_000;
+      });
     } catch {
-      return false;
+      return [];
     }
   }
 
