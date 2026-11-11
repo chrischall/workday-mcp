@@ -6,7 +6,6 @@ import {
   questionBlanks,
   questionFieldIds,
   summaryQuestionFields,
-  summaryQuestions,
 } from '../src/parse-feedback.js';
 import { giveForm, questionRowAdded, requestForm, templateChosen, templateWithBlank } from './feedback-fixtures.js';
 
@@ -69,7 +68,7 @@ describe('changeSummary readers', () => {
   });
 
   it('reads a template\'s questions as plain text', () => {
-    expect(summaryQuestions(templateChosen)).toEqual([
+    expect(summaryQuestionFields(templateChosen).map((q) => q.text)).toEqual([
       'Please provide me feedback on what I can do differently?',
       'What did I do well?',
     ]);

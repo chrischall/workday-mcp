@@ -102,7 +102,8 @@ describe('WorkdayClient — give feedback', () => {
     const { client, transport } = makeClient(giveRoutes());
     vi.spyOn(client, 'getFeedback').mockResolvedValue({
       matched: 'Feedback Given',
-      feedback: [{ To: 'Pat Doe', Feedback: 'Great <work>.' }],
+      // The live Feedback Given columns: Date, About, Feedback, Type, …
+      feedback: [{ Date: new Date().toLocaleDateString('en-US'), About: 'Pat Doe', Feedback: 'Great <work>.' }],
     });
     const plan = await client.planGiveFeedback({ to: 'Pat Doe', feedback: 'Great <work>.' });
     transport.calls.length = 0;
@@ -118,6 +119,18 @@ describe('WorkdayClient — give feedback', () => {
     expect(posts(transport)[4]!.get('931')).toBe('934$20');
     expect(r).toMatchObject({ action: 'give', to: 'Pat Doe', verified: true });
     expect(client.getFeedback).toHaveBeenCalledWith('247$1', 'given');
+  });
+
+  it('does not count older feedback with the same words as this one', async () => {
+    const { client } = makeClient(giveRoutes());
+    vi.spyOn(client, 'getFeedback').mockResolvedValue({
+      matched: 'Feedback Given',
+      feedback: [{ Date: '01/02/2020', About: 'Pat Doe', Feedback: 'Great <work>.' }],
+    });
+    const plan = await client.planGiveFeedback({ to: 'Pat Doe', feedback: 'Great <work>.' });
+    const r = await client.applyGiveFeedback(plan);
+    expect(r.verified).toBe(false);
+    expect(r.verification).toMatch(/check your profile/);
   });
 
   it('refuses to submit when the recipient now resolves differently', async () => {
