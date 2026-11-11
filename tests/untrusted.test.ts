@@ -59,6 +59,7 @@ const UNTRUSTED_TOOLS = [
   'workday_graphql',
   'workday_get_reviews',
   'workday_get_feedback',
+  'workday_get_feedback_status',
   'workday_get_request_form',
   'workday_get_team_snapshot',
   'workday_get_inbox',
@@ -90,7 +91,8 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
       review: '2025 Year-End',
       sections: [{ name: 'Values', values: [{ group: 'Manager Summary', label: 'Comment', value: INJECTION }] }],
     });
-    vi.spyOn(client, 'getFeedback').mockResolvedValue({ matched: 'Feedback Received', feedback: [{ Feedback: INJECTION }] });
+    vi.spyOn(client, 'getFeedback').mockResolvedValue({ matched: 'Feedback Received', worker: 'Pat', feedback: [{ Feedback: INJECTION }] });
+    vi.spyOn(client, 'getFeedbackStatus').mockResolvedValue({ requestedBy: 'Pat', requests: [{ request: INJECTION, asked: [], answeredBy: [], waitingOn: [], questions: [] }] });
     vi.spyOn(client, 'getTeamSnapshot').mockResolvedValue({ report: 'All', people: [{ Name: INJECTION }] });
     vi.spyOn(client, 'getRequest').mockResolvedValue({ request: '1$1', questions: [{ number: 1, question: INJECTION, required: true, answerType: 'text' }] });
     vi.spyOn(client, 'getInbox').mockResolvedValue({ total: 1, items: [{ title: INJECTION }] });
@@ -145,6 +147,7 @@ describe('untrusted-content framing (fleet-audit#913)', () => {
     ['workday_get_reviews', { worker: '247$42' }],
     ['workday_get_reviews', { worker: '247$42', review: 'latest' }],
     ['workday_get_feedback', { worker: '247$42' }],
+    ['workday_get_feedback_status', {}],
     ['workday_get_request_form', { requestType: 'promotion' }],
     ['workday_get_team_snapshot', {}],
     ['workday_get_inbox', {}],

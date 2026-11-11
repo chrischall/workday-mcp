@@ -55,6 +55,10 @@ export interface WorkdayRow {
   cells: Record<string, string>;
   /** Drill-in references carried by this row's navigational columns. */
   references: WorkdayReference[];
+  /** This row continues the item above it: Workday sent only the columns of a
+   *  `columnGroup` (one more answer, one more responder), and the rest of its
+   *  cells were filled in from that item's first row. */
+  continuation?: true;
 }
 
 export interface WorkdaySection {
@@ -81,6 +85,9 @@ export interface WorkdayGrid {
   pagingUri?: string;
   /** Excel export for the full grid. */
   excel?: string;
+  /** Labels of the columns nested under a `columnGroup` — the part of a row
+   *  that varies between an item and its continuation rows. */
+  groupColumns?: string[];
 }
 
 /** One tab of a worker profile and the drill-in tasks it offers. */
@@ -377,6 +384,13 @@ function cellText(col: Obj): string | undefined {
     const html = str(col.value);
     return html ? stripHtml(html) || undefined : undefined;
   }
+  // A cell can wrap its datum in a `fieldSet` (live: Feedback Requested's
+  // responder is a person monikerList beside their photo). Read its children.
+  if (widget === 'fieldSet') {
+    const kids = Array.isArray(col.children) ? col.children.filter(isObj) : [];
+    const texts = kids.map(cellText).filter((t): t is string => !!t);
+    return texts.length ? texts.join(', ') : undefined;
+  }
   // `text` and any unrecognized widget: take whichever scalar it carries.
   return str(col.value) ?? str(col.text);
 }
@@ -641,23 +655,32 @@ function parseGrid(grid: Obj): WorkdayGrid {
   // under "Effective Job Requisition"); keying both by the bare label would
   // let one overwrite the other, so a repeat is prefixed with its group.
   const used = new Set<string>();
-  const addColumns = (list: unknown, depth: number, group?: string): void => {
+  // Ids of the columns nested under a group: a row carrying ONLY these is a
+  // continuation of the item above (another answer, another responder).
+  const groupIds = new Set<string>();
+  const groupColumns: string[] = [];
+  const addColumns = (list: unknown, depth: number, group?: string, inGroup = false): void => {
     if (!Array.isArray(list) || depth > 5) return;
     for (const col of list) {
       if (!isObj(col)) continue;
       if (Array.isArray(col.columns)) {
-        addColumns(col.columns, depth + 1, str(col.label) ?? group);
+        addColumns(col.columns, depth + 1, str(col.label) ?? group, true);
         continue;
       }
       const id = str(col.columnId);
-      let label = str(col.label) ?? id ?? '';
+      // Some columns have no label, only a propertyName ("wd:Feedback_Requested--IS");
+      // that reads far better than the opaque id ("102.1").
+      let label = str(col.label) ?? propertyLabel(str(col.propertyName)) ?? id ?? '';
       if (used.has(label) && group) label = `${group}: ${label}`;
       used.add(label);
       if (id) idToLabel.set(id, label);
+      if (id && inGroup) groupIds.add(id);
+      if (inGroup) groupColumns.push(label);
       columns.push(label);
     }
   };
   addColumns(grid.columns, 0);
+  let lead: WorkdayRow | undefined;
   const rows: WorkdayRow[] = [];
   const rowsRaw = Array.isArray(grid.rows) ? grid.rows : [];
   for (const row of rowsRaw) {
@@ -694,8 +717,20 @@ function parseGrid(grid: Obj): WorkdayGrid {
         }
       }
     }
+    // Workday sends an item's first row whole and each further row with only
+    // its group's columns; fill those in from the first so every row stands
+    // on its own. The group columns themselves are never carried down.
+    const continues = groupIds.size > 0 && lead !== undefined && Object.keys(cellsMap).every((id) => groupIds.has(id));
+    if (continues && lead) {
+      const groupLabels = new Set(groupColumns);
+      const carried = Object.fromEntries(Object.entries(lead.cells).filter(([k]) => !groupLabels.has(k)));
+      rows.push({ cells: { ...carried, ...cells }, references: [...lead.references, ...acc.references], continuation: true });
+      continue;
+    }
     if (Object.keys(cells).length || acc.references.length) {
-      rows.push({ cells, references: acc.references });
+      const row: WorkdayRow = { cells, references: acc.references };
+      rows.push(row);
+      lead = row;
     }
   }
   const excel = isObj(grid.excelLink) ? str(grid.excelLink.uri) : undefined;
@@ -710,7 +745,20 @@ function parseGrid(grid: Obj): WorkdayGrid {
     ...(total !== undefined ? { totalRowCount: total } : {}),
     ...(paging ? { pagingUri: paging } : {}),
     ...(excel ? { excel } : {}),
+    ...(groupColumns.length ? { groupColumns } : {}),
   };
+}
+
+/** A readable label from a Workday propertyName: `wd:Feedback_Requested--IS`
+ *  → "Feedback Requested". */
+function propertyLabel(name: string | undefined): string | undefined {
+  if (!name) return undefined;
+  const label = name
+    .replace(/^[a-z]+:/i, '')
+    .replace(/--[A-Z]+$/, '')
+    .replace(/_+/g, ' ')
+    .trim();
+  return label || undefined;
 }
 
 function parseGrids(root: Obj): WorkdayGrid[] {

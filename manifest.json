@@ -120,6 +120,10 @@
       "description": "Read the feedback a worker has received, given, or requested"
     },
     {
+      "name": "workday_get_feedback_status",
+      "description": "Check on every feedback request you made: who has answered and who is still to"
+    },
+    {
       "name": "workday_get_request_form",
       "description": "Load a request type's form (e.g. promotion consideration) and list its questions and required fields, without creating a request"
     },

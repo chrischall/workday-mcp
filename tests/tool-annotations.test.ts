@@ -69,7 +69,7 @@ afterAll(async () => {
 
 describe('tool annotations', () => {
   it('covers the full surface (guards against a registrar being dropped here)', () => {
-    expect(Object.keys(ann)).toHaveLength(26);
+    expect(Object.keys(ann)).toHaveLength(27);
   });
 
   it('sets an explicit boolean readOnlyHint on every tool', () => {

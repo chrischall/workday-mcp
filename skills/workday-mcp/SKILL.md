@@ -96,7 +96,14 @@ reuses that live session — there is no separate login.
   `latest`) to open one in full: each section's manager and employee ratings
   and comments, goals and development items.
 - **`workday_get_feedback`** — feedback a worker `received` (default), `given`
-  or `requested`: author, date, badge, type and the full text.
+  or `requested`. `worker` may be omitted (you), a team member's name (`Justin K`)
+  or a worker id. Received/given: one entry per item with its `answers` (question
+  and text). Requested: one entry per request with `asked`,
+  `answeredBy`, `waitingOn` and each question's answers *with their authors* —
+  The requests on someone are filed on *their* profile.
+- **`workday_get_feedback_status`** — "any updates on my feedback requests?" in
+  one call: every request you made (on yourself and your team) that is open or
+  closed in the last `days`, each with `waitingOn` and the answers so far.
 - **`workday_get_request_form`** — the form for a request type such as a
   promotion consideration form: its instructions and every question with help
   text, whether it is required, and its answer type and options. Workday only
