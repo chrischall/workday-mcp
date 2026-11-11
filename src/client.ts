@@ -25,9 +25,11 @@ import {
   isReadOnlyGraphqlDocument,
   type GraphqlDocumentInfo,
 } from '@chrischall/mcp-utils/graphql';
+import { FetchproxyTimeoutError } from '@chrischall/mcp-utils/fetchproxy';
 import type {
   BridgeProbeResult,
   BridgeStatus,
+  FetchInit,
   FetchResult,
   WorkdayTransport,
 } from './transport.js';
@@ -100,6 +102,14 @@ import {
 /** Redaction depth cap for the typed path — generous so it never cuts off a
  *  subtree that `parseTask`'s own depth-40 walks (from nested sub-roots) reach. */
 const TYPED_REDACT_MAX_DEPTH = 256;
+
+// The FIRST request of a new process waits for the browser extension to
+// connect to its bridge — measured 2 s, 9 s, 23 s and once over 60 s, past
+// fetchproxy's own 30 s timeout and its one retry. Until the bridge has
+// answered once, a timed-out GET is tried again, up to this many attempts in
+// this long. After that, timeouts surface as before.
+const FIRST_CALL_ATTEMPTS = 3;
+const FIRST_CALL_WINDOW_MS = 150_000;
 
 const DEFAULT_HOST = 'wd5.myworkday.com';
 
@@ -844,12 +854,42 @@ export class WorkdayClient {
     return p;
   }
 
+  /** Whether the bridge has answered a request yet in this process. */
+  private bridgeAnswered = false;
+
+  /**
+   * Every transport round trip goes through here. Until the bridge has
+   * answered once, a GET that timed out — the extension was still
+   * connecting — is tried again (see `FIRST_CALL_ATTEMPTS`). A POST is never
+   * retried: it may write, and every flow starts with a GET anyway. Other
+   * errors (no Workday tab, bridge down) are not a slow connection and
+   * surface at once.
+   */
+  private async send(init: FetchInit): Promise<FetchResult> {
+    const started = Date.now();
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const result = await this.transport.fetch(init);
+        this.bridgeAnswered = true;
+        return result;
+      } catch (e) {
+        const patient =
+          !this.bridgeAnswered &&
+          init.method === 'GET' &&
+          e instanceof FetchproxyTimeoutError &&
+          attempt < FIRST_CALL_ATTEMPTS &&
+          Date.now() - started < FIRST_CALL_WINDOW_MS;
+        if (!patient) throw e;
+      }
+    }
+  }
+
   /**
    * GET a Workday `*.htmld` data endpoint and return the parsed JSON object.
    * Throws on non-2xx, an SSO/sign-in bounce, or a non-JSON body.
    */
   async fetchJson(path: string): Promise<unknown> {
-    const result = await this.transport.fetch({ path, method: 'GET' });
+    const result = await this.send({ path, method: 'GET' });
     this.throwIfNotOk(result, 'GET', path);
     this.throwIfSignedOut(result);
     const stripped = stripJsonGuard(result.body);
@@ -877,7 +917,7 @@ export class WorkdayClient {
    *  signed-out guards. Used by the healthcheck probe (which wants the body
    *  length, not parsed JSON). */
   async fetchRaw(path: string): Promise<string> {
-    const result = await this.transport.fetch({ path, method: 'GET' });
+    const result = await this.send({ path, method: 'GET' });
     this.throwIfNotOk(result, 'GET', path);
     this.throwIfSignedOut(result);
     return result.body;
@@ -1382,7 +1422,7 @@ export class WorkdayClient {
     const path =
       `/${this.tenant}/internalapi/internalapi/inbox/v2/${this.tenant}/inboxItems` +
       `?category=${cat}&offset=0&limit=${limit}`;
-    const result = await this.transport.fetch({
+    const result = await this.send({
       path,
       method: 'GET',
       headers: { Accept: 'application/json', 'Session-Secure-Token': token },
@@ -2867,7 +2907,7 @@ export class WorkdayClient {
     headers: Record<string, string> = {},
     opts: { retryOnTimeout?: boolean } = {}
   ): Promise<unknown> {
-    const result = await this.transport.fetch({
+    const result = await this.send({
       path,
       method: 'POST',
       ...(opts.retryOnTimeout ? { retryOnTimeout: true } : {}),
@@ -2910,7 +2950,7 @@ export class WorkdayClient {
           'Workday tab and retry.'
       );
     }
-    const result = await this.transport.fetch({
+    const result = await this.send({
       path,
       method: 'POST',
       headers: {

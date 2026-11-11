@@ -31,7 +31,9 @@ every request rides the user's signed-in `*.myworkday.com` tab.
   defaulted), the `fetchJson`/`postJson` primitives, path normalization (strips
   `#fragments`, converts copied `/d/` SPA URLs to data endpoints, appends
   `.htmld`), error mapping (non-2xx, SSO/sign-in bounce →
-  `SessionNotAuthenticatedError`), and the composed reads: `crawl` (hub → child
+  `SessionNotAuthenticatedError`), first-call patience (`send`: until the bridge has
+  answered once in this process, a timed-out GET is retried — the extension
+  can take 2–60+ s to connect; POSTs are never retried), and the composed reads: `crawl` (hub → child
   cards, bounded by depth/maxCards/visited), `resolveApp`/`openApp` (by LABEL,
   never a captured id), `getWorker`/`getWorkerTask`/`getOrgChart`,
   `getTeam`/`getReviews`/`getReview`/`getFeedback`, `getRequestForm`,
