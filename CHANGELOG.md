@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.6.0](https://github.com/chrischall/workday-mcp/compare/v1.5.0...v1.6.0) (2026-11-11)
+
+
+### Features
+
+* **feedback:** choose who sees feedback you give or request ([#198](https://github.com/chrischall/workday-mcp/issues/198)) ([50cc4eb](https://github.com/chrischall/workday-mcp/commit/50cc4ebe97f7f8d1ec63cb602de914e6a2c163fc))
+* **feedback:** fill in a feedback template's blanks ([#200](https://github.com/chrischall/workday-mcp/issues/200)) ([b7c8c35](https://github.com/chrischall/workday-mcp/commit/b7c8c352d7487f70b33978cf0d92a5330139bc87))
+* **feedback:** give and request feedback ([#197](https://github.com/chrischall/workday-mcp/issues/197)) ([29bcc98](https://github.com/chrischall/workday-mcp/commit/29bcc9817469a51c0ad8c46bdd3ef7c524406d9d))
+
+
+### Bug Fixes
+
+* **bridge:** wait longer for the browser extension on the first call ([#202](https://github.com/chrischall/workday-mcp/issues/202)) ([a680cd6](https://github.com/chrischall/workday-mcp/commit/a680cd6eae1114f1e70413e51b4e62edc9b0cc43))
+* **feedback:** only count feedback dated today when verifying a give ([#201](https://github.com/chrischall/workday-mcp/issues/201)) ([32c0765](https://github.com/chrischall/workday-mcp/commit/32c0765b89cd8f30499e4a7d9ff5fb3169594f49))
+* **feedback:** verify a sent feedback request by its questions ([#199](https://github.com/chrischall/workday-mcp/issues/199)) ([2e52ebc](https://github.com/chrischall/workday-mcp/commit/2e52ebc891eb75c541fcbefb2c841e4a547c98d7))
+* **reports:** redact report prompt defaults before returning them ([#195](https://github.com/chrischall/workday-mcp/issues/195)) ([854aafa](https://github.com/chrischall/workday-mcp/commit/854aafa029bf7d5b9e6ddc728f41f4167290ba26))
+
 ## [1.5.0](https://github.com/chrischall/workday-mcp/compare/v1.4.0...v1.5.0) (2026-11-10)
 
 
