@@ -67,6 +67,12 @@ every request rides the user's signed-in `*.myworkday.com` tab.
   ids, the feedback field, badge options, recipients and template prompts,
   the question list, and the hidden visibility defaults (which the preview
   states); plus changeSummary readers for added question rows.
+- `src/rich-text.ts` — Workday rich text through `@chrischall/mcp-utils/rich`.
+  Prose a person wrote reads as Markdown (`readRichText`), labels and prompts
+  as text (`readPlainText`, which `stripHtml` now is). Writes go Markdown →
+  `toWorkdayHtml`, kept to the tags Workday was seen to store (`p br ul li b
+  span`); what it can't hold is said in words (numbers, link addresses). Only
+  Workday's own quirks live here (`&#xa;` as a newline, that tag set).
 - `src/transport-fetchproxy.ts` — wraps `@chrischall/mcp-utils/fetchproxy`;
   `splitHost` maps `wd5.myworkday.com` → domain `myworkday.com` + subdomain `wd5`.
 - `src/tools/*.ts` — `registerXxxTools(server, client)` → `server.registerTool`.

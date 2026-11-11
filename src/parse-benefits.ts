@@ -12,6 +12,7 @@
  * docs/WORKDAY-API.md, "Benefits and open enrollment".
  */
 import { stripHtml, type WorkdayGrid } from './parse.js';
+import { readRichText } from './rich-text.js';
 
 type Obj = Record<string, unknown>;
 
@@ -253,7 +254,7 @@ export function parsePlanOptions(root: unknown): WorkdayPlanOptions | undefined 
       if (v && !notes.includes(v)) notes.push(v);
     }
     if (n.widget === 'richTextArea' && /Instruction/i.test(prop) && !instructions) {
-      instructions = stripHtml(str(n.value) ?? '').replace(/\s+\n/g, '\n').trim() || undefined;
+      instructions = readRichText(str(n.value) ?? '') || undefined;
     }
   });
   if (!grid) return undefined;

@@ -4,7 +4,9 @@
 // widgets they recognise and never walk the envelope wholesale. Field ids are
 // PER PAGE LOAD, so a write must use the ids of the page it just opened.
 
+import { escapeHtml } from '@chrischall/mcp-utils/rich';
 import { stripHtml } from './parse.js';
+import { toWorkdayHtml } from './rich-text.js';
 
 type Obj = Record<string, unknown>;
 
@@ -174,9 +176,10 @@ export interface SummaryQuestionField {
   blanks: string[];
 }
 
-/** Rich text → plain text, minus the zero-width spaces Workday appends. */
+/** A question's rich text as plain text (the shared reader drops the
+ *  zero-width space Workday appends). */
 export function questionText(html: string): string {
-  return stripHtml(html).replace(/​/g, '').trim();
+  return stripHtml(html);
 }
 
 /** The questions a change added (a template's), with their field ids. */
@@ -211,15 +214,9 @@ export function questionFieldIds(summary: unknown): string[] {
   return addedQuestionFields(summary).map((o) => o.id as string);
 }
 
-
-const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-/** Plain text → the rich-text HTML Workday's editor posts: one `<p>` per
- *  paragraph, single line breaks kept as `<br>`, markup escaped. */
-export function feedbackHtml(text: string): string {
-  return text
-    .trim()
-    .split(/\n\s*\n/)
-    .map((p) => `<p>${escapeHtml(p.trim()).replace(/\n/g, '<br>')}</p>`)
-    .join('');
+/** Feedback or a question as the HTML Workday stores: Markdown (bold,
+ *  bulleted and numbered lists, links, paragraphs) within Workday's tag set,
+ *  anything else escaped. See `rich-text.ts`. */
+export function feedbackHtml(markdown: string): string {
+  return toWorkdayHtml(markdown);
 }

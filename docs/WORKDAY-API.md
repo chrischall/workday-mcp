@@ -193,6 +193,8 @@ All plain GETs unless noted, and every hop is matched by LABEL:
   `style="text-align:left"`), `<br />`, `<ul><li>` (sometimes `<li><p>`), `<b>`,
   bare `<span>`, entities `&#39;` `&#34;` `&#x2019;`, and a trailing U+200B.
   Paragraph breaks are written as `<p></p>`, `<br /><br />` or `</p><br /><p>`.
+  Writes stay inside that tag set (`src/rich-text.ts`); a tag outside it has
+  never been tried live, so whether Workday keeps one is unknown.
   All three feedback grids send an item as one FULL row followed by
   **continuation rows carrying only the group's columns** (one per further
   answer / responder); `parseGrid` marks them `continuation` and fills them in

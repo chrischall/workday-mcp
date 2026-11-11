@@ -31,7 +31,7 @@ describe('grids with a columnGroup (live feedback grids)', () => {
       Status: 'In Progress',
       'Request Date': '11/10/2026',
       From: 'Lee Ray',
-      Feedback: 'You are doing great.',
+      Feedback: 'You are doing **great**.',
     });
     // The request's instance id rides along, so two same-day requests with
     // the same label can still be told apart.
@@ -44,7 +44,7 @@ describe('grids with a columnGroup (live feedback grids)', () => {
     const received2 = received.rows[1]!;
     expect(received2.continuation).toBe(true);
     expect(received2.cells).toMatchObject({ From: 'Lee Ray', Date: '11/11/2026', Question: 'What should I keep doing?' });
-    expect(received2.cells['Feedback']).toBe('- Unblocking us\n- Being approachable');
+    expect(received2.cells['Feedback']).toBe('- Unblocking us\n- Being _approachable_');
     // Row 3 starts a new item: nothing of Lee's leaks into it.
     expect(received.rows[2]!.cells).toEqual({
       Date: '01/02/2024',

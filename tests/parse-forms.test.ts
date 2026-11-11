@@ -21,7 +21,7 @@ describe('stripHtml', () => {
   it('turns Workday rich text into readable plain text', () => {
     expect(
       stripHtml('<p><b>Title</b></p><br /><p>Line one&#x2019;s &amp; two</p><ul><li>a</li><li>b</li></ul>')
-    ).toBe("Title\n\nLine one’s & two\n- a\n- b");
+    ).toBe("Title\n\nLine one’s & two\n\n- a\n- b");
   });
 
   it('decodes the encoded newline Workday puts in comments', () => {
@@ -45,7 +45,7 @@ describe('parseQuestionnaire — a Workday request questionnaire form', () => {
   it('reads the title and plain-text instructions', () => {
     expect(q?.title).toBe('2026 Example Request Form');
     expect(q?.instructions).toBe(
-      'Purpose of this form\n\nExplain the recommendation.\n- Use specific examples.\n- Align with your leader first.'
+      '**Purpose of this form**\n\nExplain the recommendation.\n\n- Use specific examples.\n- Align with your leader first.'
     );
   });
 
@@ -200,7 +200,7 @@ describe('parseFormValues — the filled-in values of a read-only form page', ()
   });
 
   it('numbers repeating items (goals, beliefs) and keeps their unlabelled text', () => {
-    expect(values).toContainEqual({ group: 'Values', item: 1, label: '', value: 'Think like a customer' });
+    expect(values).toContainEqual({ group: 'Values', item: 1, label: '', value: '**Think like a customer**' });
   });
 
   it('skips the Save for Later control, unselected dropdowns, empty text and zero defaults', () => {

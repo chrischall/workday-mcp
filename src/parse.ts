@@ -22,6 +22,7 @@
 // widget VALUES is a different axis: `WorkdayClient.getTask` runs the tree
 // through `redactTree` (src/redact.ts) before it reaches this parser.
 
+import { readPlainText, readRichText } from './rich-text.js';
 import { REDACTED } from './redact.js';
 
 export interface WorkdayField {
@@ -219,38 +220,13 @@ function str(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined;
 }
 
-const NAMED_ENTITIES: Record<string, string> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: ' ',
-};
-
 /**
- * Workday rich text (review comments, feedback, questionnaire prompts) as
- * readable plain text. Block ends become newlines, list items become `- `
- * bullets, and entities — including the `&#xa;` newline Workday appends to
- * business-process comments — are decoded.
+ * Workday rich text as plain text, paragraph breaks kept — for labels, prompts
+ * and messages. Prose a person wrote reads as Markdown instead
+ * ({@link readRichText}). Both come from `@chrischall/mcp-utils/rich`.
  */
 export function stripHtml(html: string): string {
-  const text = html
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<li[^>]*>/gi, '- ')
-    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(parseInt(dec, 10)))
-    .replace(/&([a-z]+);/gi, (m, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? m)
-    // Workday labels a blank field "&nbsp" — no semicolon.
-    .replace(/&nbsp(?![a-z;])/gi, ' ');
-  return text
-    .split('\n')
-    .map((line) => line.replace(/[ \t ]+/g, ' ').trim())
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  return readPlainText(html);
 }
 
 // Widgets whose `value` is rich-text HTML rather than display text.
@@ -382,7 +358,7 @@ function cellText(col: Obj): string | undefined {
   // person would see.
   if (widget && RICH_TEXT_WIDGETS.has(widget)) {
     const html = str(col.value);
-    return html ? stripHtml(html) || undefined : undefined;
+    return html ? readRichText(html) || undefined : undefined;
   }
   // A cell can wrap its datum in a `fieldSet` (live: Feedback Requested's
   // responder is a person monikerList beside their photo). Read its children.
@@ -1270,7 +1246,7 @@ const SELECT_WIDGETS = new Set(['dropDownSelectList', 'radioButtonSelectList', '
 function formValueOf(node: Obj, widget: string): string | undefined {
   if (RICH_TEXT_WIDGETS.has(widget)) {
     const html = str(node.value);
-    return html ? stripHtml(html) || undefined : undefined;
+    return html ? readRichText(html) || undefined : undefined;
   }
   if (TEXT_VALUE_WIDGETS.has(widget)) {
     const v = str(node.value)?.trim();
@@ -1509,7 +1485,7 @@ function readQuestionPanels(body: Obj): ReadQuestion[] {
       if (texts.length) answer = texts.join(', ');
     } else if (control && answerType === 'text') {
       const v = str(control.value);
-      if (v) answer = RICH_TEXT_WIDGETS.has(str(control.widget) ?? '') ? stripHtml(v) : v;
+      if (v) answer = RICH_TEXT_WIDGETS.has(str(control.widget) ?? '') ? readRichText(v) : v;
     }
     const fieldId = control ? str(control.id) : undefined;
     let field: WorkdayAnswerField | undefined;
@@ -1558,7 +1534,7 @@ export function parseQuestionnaire(root: unknown): WorkdayQuestionnaire | undefi
   const instructionsNode = findWidgets(root.body, 'richTextArea').find((n) =>
     /Questionnaire_Instructions/.test(str(n.id) ?? '')
   );
-  const instructions = instructionsNode ? stripHtml(str(instructionsNode.value) ?? '') : '';
+  const instructions = instructionsNode ? readRichText(str(instructionsNode.value) ?? '') : '';
   const title = pageTitle(root);
   return {
     ...(title ? { title } : {}),

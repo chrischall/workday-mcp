@@ -23,8 +23,8 @@ describe('groupFeedback — requested', () => {
 
   it('puts each answer, with its author, under its question', () => {
     expect(out[0]!.questions).toEqual([
-      { question: 'How am I doing?', answers: [{ from: 'Lee Ray', feedback: 'You are doing great.' }] },
-      { question: 'What should I keep doing?', answers: [{ from: 'Lee Ray', feedback: '- Unblocking us\n- Being approachable' }] },
+      { question: 'How am I doing?', answers: [{ from: 'Lee Ray', feedback: 'You are doing **great**.' }] },
+      { question: 'What should I keep doing?', answers: [{ from: 'Lee Ray', feedback: '- Unblocking us\n- Being _approachable_' }] },
     ]);
     expect(out[1]!.questions).toEqual([{ question: 'What could I do better?', answers: [] }]);
   });
@@ -66,8 +66,8 @@ describe('groupFeedback — received', () => {
         Type: 'Requested by Self',
         'Private: Shared with Feedback Recipient': 'Yes',
         answers: [
-          { question: 'How am I doing?', feedback: 'You are doing great.' },
-          { question: 'What should I keep doing?', feedback: '- Unblocking us\n- Being approachable' },
+          { question: 'How am I doing?', feedback: 'You are doing **great**.' },
+          { question: 'What should I keep doing?', feedback: '- Unblocking us\n- Being _approachable_' },
         ],
       },
       {

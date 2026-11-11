@@ -82,6 +82,12 @@ describe('feedbackHtml', () => {
     );
   });
 
+  it('writes Markdown in the tags Workday stores', () => {
+    expect(feedbackHtml('**Great** work.\n\n- shipped early\n- no rollbacks')).toBe(
+      '<p><b>Great</b> work.</p><ul><li>shipped early</li><li>no rollbacks</li></ul>'
+    );
+  });
+
   it('keeps single line breaks inside a paragraph', () => {
     expect(feedbackHtml('one\ntwo')).toBe('<p>one<br>two</p>');
   });

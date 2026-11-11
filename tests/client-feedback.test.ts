@@ -307,6 +307,16 @@ describe('WorkdayClient — request feedback', () => {
     expect((await client.applyRequestFeedback(plan)).verified).toBe(true);
   });
 
+  it('verifies a formatted question against how Workday shows it once stored', async () => {
+    const asked = '**Looking back**, how did [the launch](https://example.com/l) go for you?';
+    const { client } = makeClient(requestRoutes());
+    vi.spyOn(client, 'getFeedbackRows').mockResolvedValue([
+      { Status: 'In Progress', 'Request Date': new Date().toLocaleDateString('en-US'), Question: '**Looking back**, how did the launch (https://example.com/l) go for you?' },
+    ]);
+    const plan = await client.planRequestFeedback({ from: ['Sam Roe'], questions: [asked] });
+    expect((await client.applyRequestFeedback(plan)).verified).toBe(true);
+  });
+
   it('does not count an older request that asked the same question', async () => {
     const { client } = makeClient(requestRoutes());
     vi.spyOn(client, 'getFeedbackRows').mockResolvedValue([{ Status: 'Completed', 'Request Date': '01/02/2020', Question: 'Q?' }]);
