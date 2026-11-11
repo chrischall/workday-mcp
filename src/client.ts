@@ -688,6 +688,19 @@ function pickByLabel<T>(items: T[], label: (t: T) => string, wanted: string, wha
   );
 }
 
+/** Whether each part starts a word of `text`, in order — "Justin K"
+ *  matches "Justin Kolodny" but not "Kim Justin". */
+function wordsStartWith(text: string, parts: string[]): boolean {
+  const words = text.toLowerCase().split(/[\s,()-]+/).filter(Boolean);
+  let at = 0;
+  for (const part of parts.map((p) => p.toLowerCase())) {
+    while (at < words.length && !words[at]!.startsWith(part)) at++;
+    if (at === words.length) return false;
+    at++;
+  }
+  return true;
+}
+
 /** Whitespace-collapsed, for matching text across Workday's renderings. */
 function norm(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
@@ -1633,21 +1646,40 @@ export class WorkdayClient {
     value: string,
     strict = false
   ): Promise<{ text: string; instanceId: string; summary?: Record<string, unknown> }> {
-    const found = (await this.postForm(`/${this.tenant}/prompt/${prompt.contextId}/${prompt.id}.htmld`, {
-      _flowExecutionKey: flowKey,
-      _eventId_prompt: prompt.id,
-      q: value,
-    })) as { items?: Array<{ instanceId?: string; text?: string }> };
-    const items = (found.items ?? []).filter(
-      (i): i is { instanceId: string; text: string } => !!i.instanceId && !!i.text
-    );
+    type Item = { instanceId: string; text: string; subHeader?: string };
+    const search = async (q: string): Promise<Item[]> => {
+      const found = (await this.postForm(`/${this.tenant}/prompt/${prompt.contextId}/${prompt.id}.htmld`, {
+        _flowExecutionKey: flowKey,
+        _eventId_prompt: prompt.id,
+        q,
+      })) as { items?: Array<Partial<Item>> };
+      return (found.items ?? []).filter((i): i is Item => !!i.instanceId && !!i.text);
+    };
+    let items = await search(value);
+    let viaFirstWord = false;
+    if (!items.length) {
+      // Workday's search wants whole words: "Justin K" finds nobody where
+      // "Justin" finds Justin Kolodny. Retry by the first word and keep the
+      // options every part of the value starts a word of, in order.
+      const parts = value.trim().split(/\s+/);
+      const near = parts.length > 1 ? (await search(parts[0]!)).filter((i) => wordsStartWith(i.text, parts)) : [];
+      if (near.length > 1) {
+        throw new Error(
+          `"${value}" could be ${near.map((i) => (i.subHeader ? `${i.text} (${i.subHeader})` : i.text)).join(' | ')}. ` +
+            'Use the full name.'
+        );
+      }
+      items = near;
+      viaFirstWord = near.length === 1;
+    }
     if (!items.length) {
       throw new Error(
         `No "${prompt.label}" option matching "${value}" that you can pick. Use a distinctive part of ` +
           'the name as Workday shows it in that prompt.'
       );
     }
-    const pick = pickByLabel(items, (i) => i.text, value, `"${prompt.label}" option`);
+    // The first-word retry already matched every part of the value.
+    const pick = viaFirstWord ? items[0]! : pickByLabel(items, (i) => i.text, value, `"${prompt.label}" option`);
     const iid = pick.instanceId;
     const add = {
       _eventId_add: prompt.id,
@@ -1843,9 +1875,9 @@ export class WorkdayClient {
       const opened = await this.openViaAssociatePrompt(GET_FEEDBACK_ON_ASSOCIATE_TASK, input.about).catch((e: Error) => {
         throw /^No ".*" option matching/.test(e.message)
           ? new Error(
-              `Workday offers no one matching "${input.about}" to request feedback about. Get Feedback on ` +
-                'Associate only lists your team or the people under you in your management hierarchy — not ' +
-                'peers or managers.'
+              `Workday offers no one matching "${input.about}" to request feedback about. Check the spelling; ` +
+                'note too that Get Feedback on Associate only lists your team or the people under you in your ' +
+                'management hierarchy — not peers or managers.'
             )
           : e;
       });

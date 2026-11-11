@@ -143,7 +143,11 @@ reuses that live session — there is no separate login.
   (a template may have `[BLANK]`s such as `[ENTER BEHAVIOR]`: the call then
   fails naming them and quoting the question — ask the user what goes there
   and call again with `fill: {"ENTER BEHAVIOR": "…"}`) —
-  `confidential` keeps the answers from the person they are about. Same confirm gate; the preview lists
+  `confidential` keeps the answers from the person they are about. When it is
+  about someone else, ask the user whether that person should see the answers.
+  Names can be partial ("Justin K"): if Workday's search finds nobody, the
+  first name is searched and the one person every part matches is used —
+  the preview shows the full name; several matches are listed instead. Same confirm gate; the preview lists
   every question, including the template's. Each person asked gets an inbox
   task once it is submitted.
 - **`workday_get_request`** — your open requests ("Revise Request" tasks),

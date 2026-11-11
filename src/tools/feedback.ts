@@ -84,7 +84,8 @@ export function registerFeedbackTools(server: McpServer, client: WorkdayClient):
         'about someone on your team or under you (`about`, "Get Feedback on Associate" — Workday offers no ' +
         'peers or managers there). `from` lists who to ask, by ' +
         'name. Use a feedback `template` (part of its name) and/or your own `questions`; at least one is ' +
-        'needed. Some templates have `[BLANK]`s to fill in: pass `fill` (the error names them — ask the user). ' +
+        'needed. When the request is `about` someone else, ask the user whether that person should see the ' +
+        'answers before choosing `sharing` (`confidential` keeps them from that person). Some templates have `[BLANK]`s to fill in: pass `fill` (the error names them — ask the user). ' +
         '`sharing` sets who sees the answers (e.g. `confidential` keeps them from the person they are ' +
         'about). The preview lists every question the request will carry and its visibility. Each person ' +
         'asked gets a task in their Workday inbox. After submitting, Feedback Requested is re-read to ' +
