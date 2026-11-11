@@ -87,6 +87,11 @@ describe.each([
     expect(JSON.stringify(res)).toContain('"verified":true');
   });
 
+  it.runIf(name === 'workday_request_feedback')('tells the model to ask who should see feedback about someone else', () => {
+    const { tools } = harness();
+    expect((tools.get(name)!.config as { description?: string }).description).toMatch(/ask the user whether .* should see/i);
+  });
+
   it('passes `sharing` through to the plan', async () => {
     const { client, tools } = harness();
     const planSpy = vi.spyOn(client, planFn).mockResolvedValue(makePlan() as never);

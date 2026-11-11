@@ -280,9 +280,11 @@ describe('WorkdayClient — request feedback', () => {
     const routes = requestRoutes({ about: true });
     (routes as Record<string, unknown>)['POST /acme/prompt/c0/66.htmld'] = { items: [] };
     const { client, transport } = makeClient(routes);
-    await expect(client.planRequestFeedback({ about: 'My Boss', from: ['Sam Roe'], questions: ['Q?'] })).rejects.toThrow(
-      /your team or the people under you/
-    );
+    const err = await client
+      .planRequestFeedback({ about: 'My Boss', from: ['Sam Roe'], questions: ['Q?'] })
+      .catch((e: Error) => e);
+    expect((err as Error).message).toMatch(/your team or the people under you/);
+    expect((err as Error).message).toMatch(/spelling/);
     expect(events(transport).at(-1)).toBe('_eventId_cancel=Cancel');
   });
 
@@ -371,6 +373,56 @@ describe('WorkdayClient — request feedback', () => {
     await expect(
       client.planRequestFeedback({ from: ['Sam Roe'], template: 'feedback on me', fill: { BEHAVIOR: 'x' } })
     ).rejects.toThrow(/no blank named "BEHAVIOR"/);
+  });
+
+  describe('a short or partial name', () => {
+    // Live: "Justin K" found nobody, "Justin" found Justin Kolodny among 20.
+    const people = (byQuery: Record<string, Array<{ instanceId: string; text: string; subHeader?: string }>>) => {
+      const routes = requestRoutes();
+      (routes as Record<string, unknown>)['POST /acme/prompt/c3/948.htmld'] = (init: FetchInit) => ({
+        items: byQuery[new URLSearchParams(init.body).get('q') ?? ''] ?? [],
+      });
+      return routes;
+    };
+
+    it('retries by first name and picks the one person every part of the name matches', async () => {
+      const { client, transport } = makeClient(
+        people({
+          Justin: [
+            { instanceId: '247$20', text: 'Justin Abbott' },
+            { instanceId: '247$21', text: 'Justin Kolodny', subHeader: 'Ops' },
+            { instanceId: '247$22', text: 'Kim Justin' },
+          ],
+        })
+      );
+      const plan = await client.planRequestFeedback({ from: ['Justin K'], questions: ['Q?'] });
+      expect(plan.preview.from).toEqual(['Justin Kolodny']);
+      const searches = posts(transport).filter((p) => p.get('_eventId_prompt') === '948').map((p) => p.get('q'));
+      expect(searches).toEqual(['Justin K', 'Justin']);
+      expect(posts(transport).find((p) => p.get('_eventId_add') === '948')?.get('948')).toBe('247$21');
+    });
+
+    it('lists the people when more than one could be meant, and sends nothing', async () => {
+      const { client, transport } = makeClient(
+        people({
+          Justin: [
+            { instanceId: '247$21', text: 'Justin Kolodny', subHeader: 'Ops' },
+            { instanceId: '247$23', text: 'Justin Kramer', subHeader: 'Finance' },
+          ],
+        })
+      );
+      await expect(client.planRequestFeedback({ from: ['Justin K'], questions: ['Q?'] })).rejects.toThrow(
+        /Justin Kolodny \(Ops\).*Justin Kramer \(Finance\)/s
+      );
+      expect(posts(transport).some((p) => p.get('_eventId_add') === '948')).toBe(false);
+      expect(events(transport).at(-1)).toBe('_eventId_cancel=Cancel');
+    });
+
+    it('does not guess from a single word', async () => {
+      const { client, transport } = makeClient(people({}));
+      await expect(client.planRequestFeedback({ from: ['Justin'], questions: ['Q?'] })).rejects.toThrow(/No ".*" option matching "Justin"/);
+      expect(posts(transport).filter((p) => p.get('_eventId_prompt') === '948')).toHaveLength(1);
+    });
   });
 
   it('needs at least one question or a template', async () => {
