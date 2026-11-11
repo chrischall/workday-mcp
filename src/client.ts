@@ -251,6 +251,7 @@ export interface WorkdayReview {
 }
 
 export type { FeedbackKind } from './feedback-view.js';
+import { readRichText } from './rich-text.js';
 import { groupFeedback, type FeedbackKind, type FeedbackItem, type FeedbackRequestStatus } from './feedback-view.js';
 
 /** The profile task each feedback kind lives under. */
@@ -707,11 +708,23 @@ function norm(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
 }
 
+/** Text as Workday will show it once stored and read back: written as its
+ *  HTML, then read with the same reader as the grids. */
+function asStored(markdown: string): string {
+  return readRichText(feedbackHtml(markdown));
+}
+
+/** Markdown emphasis marks dropped, for comparing what was sent with what a
+ *  grid shows (Workday's template HTML may bold what the plain text did not). */
+function unmarked(s: string): string {
+  return norm(s.replace(/\*\*|__|[*_~`]/g, ''));
+}
+
 /** Whether a Feedback Requested row's question is `asked` — Workday may
  *  show it shortened, so compare the leading text. */
 function sameQuestion(shown: string, asked: string): boolean {
-  const a = norm(shown).toLowerCase();
-  const b = norm(asked).toLowerCase();
+  const a = unmarked(shown).toLowerCase();
+  const b = unmarked(asStored(asked)).toLowerCase();
   if (!a || !b) return false;
   const n = Math.min(a.length, b.length, 60);
   return n >= Math.min(20, b.length) && a.slice(0, n) === b.slice(0, n);
@@ -1947,10 +1960,10 @@ export class WorkdayClient {
     plan: FeedbackPlan<GiveFeedbackInput, GiveFeedbackPreview>
   ): Promise<FeedbackResult<GiveFeedbackPreview>> {
     const { preview } = await this.driveGiveFeedback(plan.input, plan.revision);
-    const snippet = norm(preview.feedback).slice(0, 40);
+    const snippet = unmarked(asStored(preview.feedback)).slice(0, 40);
     const rows = await this.recentFeedback('given', undefined, 'Date');
     const check = rows.some((r) => {
-      const row = norm(Object.values(r).join(' | '));
+      const row = unmarked(Object.values(r).join(' | '));
       return row.includes(preview.to) && row.includes(snippet);
     });
     return {

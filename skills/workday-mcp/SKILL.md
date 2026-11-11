@@ -98,7 +98,7 @@ reuses that live session — there is no separate login.
 - **`workday_get_feedback`** — feedback a worker `received` (default), `given`
   or `requested`. `worker` may be omitted (you), a team member's name (`Justin K`)
   or a worker id. Received/given: one entry per item with its `answers` (question
-  and text). Requested: one entry per request with `asked`,
+  and text, as Markdown). Requested: one entry per request with `asked`,
   `answeredBy`, `waitingOn` and each question's answers *with their authors* —
   The requests on someone are filed on *their* profile.
 - **`workday_get_feedback_status`** — "any updates on my feedback requests?" in
@@ -135,7 +135,7 @@ reuses that live session — there is no separate login.
   Dashboard"): each tab's worklets and "Links to Reports", each with a
   `reportId` for `workday_run_report`. `run: true` also runs every worklet.
 - **`workday_give_feedback`** — **a write.** Give a colleague feedback (`to`,
-  `feedback` as plain text, optional `badge`). Confirm-gated: the first call
+  `feedback` as Markdown, optional `badge`). Confirm-gated: the first call
   fills Workday's form up to Submit and cancels it, returning a preview
   (recipient and badge as Workday resolved them, and the visibility it will
   post with) plus a `confirmToken`. `sharing` picks who sees it:

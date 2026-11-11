@@ -102,7 +102,7 @@ describe('parsePlanOptions', () => {
         'Select a plan or Waive to opt out of USA Medical.',
         'You can select either Plan A or the Health Care FSA, but not both.',
       ],
-      instructions: 'Pick a plan. EPO is in-network only.',
+      instructions: 'Pick a plan. **EPO is in-network only.**',
     });
   });
 

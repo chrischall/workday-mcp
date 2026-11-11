@@ -35,7 +35,8 @@ export function registerFeedbackTools(server: McpServer, client: WorkdayClient):
       title: 'Give a colleague feedback',
       description:
         'Give a colleague feedback in Workday ("Give Feedback"), optionally with a badge. `to` is their ' +
-        'name; `feedback` is plain text (blank line = new paragraph); `badge` is part of a badge name ' +
+        'name; `feedback` is Markdown — **bold**, `- ` or `1. ` lists, [links](https://…), a blank line ' +
+          'between paragraphs, written in the tags Workday keeps; `badge` is part of a badge name ' +
         '(the preview lists them if it does not match); `sharing` sets who sees it. The feedback goes on ' +
         'their Workday profile with the visibility shown in the preview. After submitting, your Feedback Given is re-read to verify. ' +
         `${CONFIRM_FLOW_SENTENCE} ${CONFIRM_INJECTION_RULE}`,
@@ -49,7 +50,7 @@ export function registerFeedbackTools(server: McpServer, client: WorkdayClient):
       },
       inputSchema: z.object({
         to: z.string().min(1).describe('The colleague\'s name, as Workday\'s people search finds them.'),
-        feedback: z.string().min(1).describe('The feedback, plain text.'),
+        feedback: z.string().min(1).describe('The feedback, as Markdown (bold, lists, links, paragraphs).'),
         badge: z.string().min(1).optional().describe('A badge, by part of its name, e.g. `own it`.'),
         sharing: sharingArg,
         confirmToken: confirmTokenParam,
@@ -109,7 +110,7 @@ export function registerFeedbackTools(server: McpServer, client: WorkdayClient):
               'offers no one else here). Omit to request feedback on yourself.'
           ),
         template: z.string().min(1).optional().describe('A feedback template, by part of its name.'),
-        questions: z.array(z.string().min(1)).optional().describe('Your own questions, plain text.'),
+        questions: z.array(z.string().min(1)).optional().describe('Your own questions, as Markdown (bold, links).'),
         fill: z
           .record(z.string(), z.string().min(1))
           .optional()
