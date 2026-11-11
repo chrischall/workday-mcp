@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/chrischall/workday-mcp/compare/v1.6.0...v1.7.0) (2026-11-11)
+
+
+### Features
+
+* **feedback:** find people from a partial name ([#203](https://github.com/chrischall/workday-mcp/issues/203)) ([ef3fb5e](https://github.com/chrischall/workday-mcp/commit/ef3fb5eb70f49d28e256d72e1fda59820b93939b))
+
 ## [1.6.0](https://github.com/chrischall/workday-mcp/compare/v1.5.0...v1.6.0) (2026-11-11)
 
 
