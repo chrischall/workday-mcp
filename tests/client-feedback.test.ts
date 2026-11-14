@@ -288,8 +288,10 @@ describe('WorkdayClient — request feedback', () => {
     vi.spyOn(client, 'getFeedbackRows').mockResolvedValue(
       // The live grid: one row per QUESTION, with no column naming who was
       // asked — so verification must match the questions, not the names.
+      // Dated today, never a literal: only rows from the last two days count
+      // as the request just sent, so a fixed date fails once it is older.
       [
-        { Status: 'In Progress', 'Request Date': '11/10/2026', Question: 'Q?', 'Feedback Requested': 'Feedback Request: Me requested by Me' },
+        { Status: 'In Progress', 'Request Date': new Date().toLocaleDateString('en-US'), Question: 'Q?', 'Feedback Requested': 'Feedback Request: Me requested by Me' },
       ]);
     const plan = await client.planRequestFeedback({ from: ['Sam Roe'], questions: ['Q?'] });
     transport.calls.length = 0;
