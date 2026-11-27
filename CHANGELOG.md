@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.1](https://github.com/chrischall/workday-mcp/compare/v1.8.0...v1.8.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* **deps:** Bump @chrischall/mcp-utils ([#213](https://github.com/chrischall/workday-mcp/issues/213)) ([8ce0992](https://github.com/chrischall/workday-mcp/commit/8ce0992eee6642897e71a3929ec321a30b370a0a))
+* **deps:** Bump @fetchproxy/server ([#210](https://github.com/chrischall/workday-mcp/issues/210)) ([6a4ff26](https://github.com/chrischall/workday-mcp/commit/6a4ff26a14e45f99292e6f10914af589a16da894))
+
 ## [1.8.0](https://github.com/chrischall/workday-mcp/compare/v1.7.0...v1.8.0) (2026-11-11)
 
 
